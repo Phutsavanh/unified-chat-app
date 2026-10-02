@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เข้าสู่ระบบ — Unified Chat</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="dot wa"></span><span class="dot fb"></span><span class="dot ig"></span>
+    </div>
+    <h1>Unified Chat Inbox</h1>
+    <p class="sub">รวมแชท WhatsApp · Facebook · Instagram ไว้หน้าเดียว</p>
+    <form id="loginForm">
+      <label>Username</label>
+      <input type="text" id="username" autocomplete="username" required>
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button type="submit">เข้าสู่ระบบ</button>
+      <p class="error" id="errorMsg"></p>
+    </form>
+    <p class="hint">ยังไม่มีบัญชี? <a href="/setup.html" style="color:#a5b4fc;">สมัครบัญชีแอดมิน</a></p>
+  </div>
+  <script src="/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Chat Inbox</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">Unified Chat</div>
+        <div class="userbox">
+          <span id="meUsername"></span>
+          <button id="logoutBtn" title="ออกจากระบบ">⏻</button>
+        </div>
+      </div>
+
+      <div class="filters">
+        <button class="filter-btn active" data-platform="all">ทั้งหมด</button>
+        <button class="filter-btn" data-platform="whatsapp">WhatsApp</button>
+        <button class="filter-btn" data-platform="facebook">Messenger</button>
+        <button class="filter-btn" data-platform="instagram">Instagram</button>
+      </div>
+
+      <div class="conv-list" id="convList"></div>
+
+      <div class="sidebar-bottom">
+        <button id="settingsBtn">⚙ ตั้งค่า / เชื่อมต่อ API</button>
+      </div>
+    </aside>
+
+    <main class="chat-pane">
+      <div id="emptyState" class="empty-state">
+        <p>เลือกการสนทนาทางซ้าย เพื่อเริ่มแชท</p>
+      </div>
+      <div id="chatView" class="chat-view hidden">
+        <div class="chat-header">
+          <span class="platform-badge" id="chatPlatformBadge"></span>
+          <span id="chatContactName"></span>
+        </div>
+        <div class="messages" id="messages"></div>
+        <form class="composer" id="composerForm">
+          <input type="text" id="composerInput" placeholder="พิมพ์ข้อความ..." autocomplete="off">
+          <button type="submit">ส่ง</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+      <h2>ตั้งค่าการเชื่อมต่อ API</h2>
+      <p class="sub">กรอกข้อมูลจาก Meta for Developers (Business App) เพื่อเชื่อมต่อแพลตฟอร์มจริง</p>
+
+      <div class="demo-box">
+        <strong>ยังไม่มี API จริง?</strong>
+        <p>กดปุ่มนี้เพื่อโหลดข้อมูลตัวอย่าง แล้วทดลองใช้งานหน้าจอรวมแชทได้ทันที</p>
+        <button id="seedDemoBtn" type="button">โหลดข้อมูลตัวอย่าง (Demo)</button>
+        <span id="seedStatus"></span>
+      </div>
+
+      <form id="settingsForm">
+        <h3>WhatsApp Business (Cloud API)</h3>
+        <label>Phone Number ID</label>
+        <input type="text" name="wa_phone_number_id">
+        <label>Access Token</label>
+        <input type="text" name="wa_access_token">
+        <label>WhatsApp Business Account ID</label>
+        <input type="text" name="wa_business_account_id">
+
+        <h3>Facebook Page / Instagram (เชื่อม IG Business กับ Page เดียวกัน)</h3>
+        <label>Page Access Token</label>
+        <input type="text" name="fb_page_access_token">
+        <label>App Secret</label>
+        <input type="text" name="fb_app_secret">
+        <label>Instagram Business Account ID</label>
+        <input type="text" name="ig_business_id">
+
+        <h3>Webhook</h3>
+        <label>Verify Token (ต้องตรงกับที่กรอกในหน้า Meta App)</label>
+        <input type="text" name="webhook_verify_token">
+        <p class="hint">
+          Webhook URL ของแอปนี้คือ <code id="webhookUrlHint"></code> — ใช้ URL เดียวกันสำหรับ
+          Messenger, Instagram และ WhatsApp ใน Meta App ของคุณ (ต้องเปิดผ่าน HTTPS ที่เข้าถึงได้จากอินเทอร์เน็ต
+          เช่นผ่าน ngrok ตอนทดสอบ)
+        </p>
+
+        <div class="modal-actions">
+          <button type="button" id="closeSettingsBtn">ปิด</button>
+          <button type="submit">บันทึก</button>
+        </div>
+        <p class="error" id="settingsError"></p>
+        <p class="success" id="settingsSuccess"></p>
+      </form>
+
+      <hr>
+      <h3>เปลี่ยนรหัสผ่านเข้าระบบ</h3>
+      <form id="pwForm">
+        <label>รหัสผ่านเดิม</label>
+        <input type="password" name="currentPassword" autocomplete="current-password">
+        <label>รหัสผ่านใหม่</label>
+        <input type="password" name="newPassword" autocomplete="new-password">
+        <div class="modal-actions">
+          <button type="submit">เปลี่ยนรหัสผ่าน</button>
+        </div>
+        <p class="error" id="pwError"></p>
+        <p class="success" id="pwSuccess"></p>
+      </form>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

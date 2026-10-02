@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สมัครบัญชีแอดมิน — Unified Chat</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="dot wa"></span><span class="dot fb"></span><span class="dot ig"></span>
+    </div>
+    <h1>ตั้งค่าบัญชีแอดมิน</h1>
+    <p class="sub">ใช้งานครั้งแรก — สร้าง username/password สำหรับเข้าสู่ระบบของคุณเอง</p>
+    <form id="setupForm">
+      <label>Username</label>
+      <input type="text" id="username" autocomplete="username" minlength="3" required>
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="new-password" minlength="6" required>
+      <label>ยืนยัน Password</label>
+      <input type="password" id="password2" autocomplete="new-password" minlength="6" required>
+      <button type="submit">สมัครและเข้าสู่ระบบ</button>
+      <p class="error" id="errorMsg"></p>
+    </form>
+    <p class="hint">บัญชีนี้จะเป็นแอดมินเพียงบัญชีเดียวของระบบ เปลี่ยนรหัสผ่านทีหลังได้ในหน้า ⚙ ตั้งค่า</p>
+  </div>
+  <script src="/js/setup.js"></script>
+</body>
+</html>
