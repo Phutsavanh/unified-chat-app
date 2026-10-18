@@ -91,6 +91,7 @@ body {
 }
 .brand { font-weight: 600; }
 .userbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+.userbox .editor-link { text-decoration: none; font-size: 15px; }
 .userbox button {
   background: none; border: 1px solid var(--border); color: var(--text-dim);
   border-radius: 6px; cursor: pointer; padding: 4px 8px;

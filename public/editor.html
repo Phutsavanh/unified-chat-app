@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaoCut — ໂປຣແກຣມຕັດຕໍ່ວິດີໂອພາສາລາວ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;700&family=Noto+Sans+Lao+Looped:wght@400;700&family=Noto+Serif+Lao:wght@400;700&family=Phetsarath:wght@400;700&display=swap">
+<link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+<div class="editor">
+  <header class="topbar">
+    <div class="brand"><span class="logo">▶</span> LaoCut</div>
+    <input id="projectName" class="project-name" title="ຊື່ໂປຣເຈັກ">
+    <select id="aspectSelect" title="ອັດຕາສ່ວນຈໍ">
+      <option value="16:9">16:9 YouTube</option>
+      <option value="9:16">9:16 TikTok / Reels</option>
+      <option value="1:1">1:1 Instagram</option>
+      <option value="4:5">4:5 Facebook</option>
+    </select>
+    <div class="spacer"></div>
+    <button id="undoBtn" class="icon" title="ຍົກເລີກ (Ctrl+Z)">↶</button>
+    <button id="redoBtn" class="icon" title="ເຮັດຄືນ (Ctrl+Y)">↷</button>
+    <button id="newProjectBtn" title="ໂປຣເຈັກໃໝ່">ໃໝ່</button>
+    <button id="settingsBtn" class="icon" title="ຕັ້ງຄ່າ AI">⚙</button>
+    <a href="/" class="link" title="ກັບໄປໜ້າ Inbox">Inbox</a>
+    <button id="exportBtn" class="primary">⤓ ສົ່ງອອກ</button>
+  </header>
+
+  <aside class="left">
+    <nav class="tabs">
+      <button data-tab="media" class="active">🎞 ສື່</button>
+      <button data-tab="text">T ຂໍ້ຄວາມ</button>
+      <button data-tab="auto">✨ ຊັບອັດຕະໂນມັດ</button>
+      <button data-tab="voice">🎙 ສຽງພາກ</button>
+      <button data-tab="subs">CC ລາຍການຊັບ <span id="subCount" class="badge">0</span></button>
+    </nav>
+
+    <section class="tab-panel" id="tab-media">
+      <div class="panel-head">
+        <button id="importBtn" class="primary wide">+ ນຳເຂົ້າ ວິດີໂອ / ຮູບ / ເພງ</button>
+        <input type="file" id="fileInput" multiple accept="video/*,audio/*,image/*,.srt,.vtt" hidden>
+      </div>
+      <div id="mediaList" class="media-grid"></div>
+      <p class="hint">ກົດ <b>+</b> ຫຼື ລາກໄຟລ໌ລົງ timeline. ໄຟລ໌ຢູ່ໃນເຄື່ອງຂອງທ່ານເທົ່ານັ້ນ, ບໍ່ໄດ້ອັບໂຫຼດ.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-text" hidden>
+      <h4>ເລືອກຮູບແບບຂໍ້ຄວາມ</h4>
+      <div id="textPresets" class="presets"></div>
+      <p class="hint">ຂໍ້ຄວາມຈະຖືກເພີ່ມທີ່ເສັ້ນເວລາ. ລາກຂໍ້ຄວາມໃນຈໍເພື່ອຍ້າຍຕຳແໜ່ງ.<br>
+        ຮອງຮັບຟອນລາວ 4 ແບບ ແລະ ຕັດແຖວຕາມຄຳລາວອັດຕະໂນມັດ.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-auto" hidden>
+      <div class="card">
+        <h4>✨ ສ້າງຊັບດ້ວຍ AI (Whisper)</h4>
+        <div id="aiStatus" class="status">...</div>
+        <label>ພາສາທີ່ເວົ້າໃນວິດີໂອ
+          <select id="subLang">
+            <option value="lo" selected>ພາສາລາວ</option>
+            <option value="th">ພາສາໄທ</option>
+            <option value="en">English</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="zh">中文</option>
+            <option value="ko">한국어</option>
+            <option value="ja">日本語</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+        <label>ຄຳສັບສະເພາະ / ຊື່ຄົນ (ຊ່ວຍໃຫ້ AI ຂຽນຖືກ)
+          <input id="subPrompt" lang="lo" placeholder="ເຊັ່ນ: ນະຄອນຫຼວງວຽງຈັນ, ທ້າວ ສົມພອນ, ເບຍລາວ">
+        </label>
+        <label class="check"><input type="checkbox" id="subReplace" checked> ແທນທີ່ຊັບເກົ່າທັງໝົດ</label>
+        <label class="check"><input type="checkbox" id="subMusic"> ລວມສຽງຈາກແທຣັກເພງນຳ</label>
+        <label class="check"><input type="checkbox" id="subModernHo"> ຂຽນ ໜ/ໝ ແທນ ຫນ/ຫມ</label>
+        <button id="autoSubBtn" class="primary wide">✨ ສ້າງຊັບອັດຕະໂນມັດ</button>
+        <p class="hint">ສຽງຈາກ timeline ຈະຖືກສົ່ງໄປຖອດຄວາມ, ແລ້ວແບ່ງແຖວຕາມຄຳລາວໃຫ້ອ່ານງ່າຍ. ຄວາມຍາວແຖວປັບໄດ້ທີ່ "ຮູບແບບຊັບ".</p>
+      </div>
+
+      <div class="card">
+        <h4>🌐 ແປຊັບ (AI)</h4>
+        <label>ແປເປັນພາສາ
+          <select id="trTo">
+            <option value="en" selected>English</option>
+            <option value="th">ພາສາໄທ</option>
+            <option value="lo">ພາສາລາວ</option>
+            <option value="zh">中文</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="ko">한국어</option>
+            <option value="ja">日本語</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+        <label>ຮູບແບບ
+          <select id="trMode">
+            <option value="below" selected>ສອງພາສາ (ຄຳແປຢູ່ແຖວລຸ່ມ)</option>
+            <option value="replace">ແທນທີ່ຂໍ້ຄວາມເດີມ</option>
+          </select>
+        </label>
+        <button id="translateBtn" class="wide">🌐 ແປຊັບທັງໝົດ</button>
+        <p class="hint">ພາສາຕົ້ນສະບັບ = "ພາສາທີ່ເວົ້າໃນວິດີໂອ" ຂ້າງເທິງ. ແປຊ້ຳໄດ້, ຄຳແປເກົ່າຈະຖືກແທນທີ່.</p>
+      </div>
+
+      <div class="card">
+        <h4>🎙 ຈັດເວລາຊັບຈາກບົດ (ບໍ່ຕ້ອງໃຊ້ AI)</h4>
+        <p class="hint">ວາງບົດເວົ້າພາສາລາວ ແລ້ວໂປຣແກຣມຈະຈັບຈັງຫວະສຽງເວົ້າ ແລະ ວາງຊັບໃຫ້ອັດຕະໂນມັດ.
+          ຖ້າປະວ່າງ ຈະສ້າງຊ່ອງວ່າງຕາມສຽງເວົ້າໃຫ້ພິມເອງ.</p>
+        <textarea id="scriptInput" rows="6" lang="lo" placeholder="ສະບາຍດີທຸກຄົນ ມື້ນີ້ພວກເຮົາຈະພາໄປທ່ຽວຫຼວງພະບາງ..."></textarea>
+        <button id="alignBtn" class="wide">🎙 ຈັດເວລາຕາມສຽງເວົ້າ</button>
+      </div>
+
+      <div class="card">
+        <h4>📄 ໄຟລ໌ຊັບ</h4>
+        <div class="row">
+          <button id="importSrtBtn">ນຳເຂົ້າ SRT/VTT</button>
+          <button id="exportSrtBtn">ສົ່ງອອກ .srt</button>
+          <button id="exportVttBtn">ສົ່ງອອກ .vtt</button>
+        </div>
+        <input type="file" id="srtInput" accept=".srt,.vtt,text/plain" hidden>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-voice" hidden>
+      <div class="card">
+        <h4>🎙 ສຽງພາກ AI</h4>
+        <div id="ttsStatus" class="status">...</div>
+        <label>ລະບົບສຽງ
+          <select id="ttsEngine">
+            <option value="azure" selected>Microsoft Azure — ສຽງລາວແທ້ (ແນະນຳ)</option>
+            <option value="openai">OpenAI — ສຳນຽງຕ່າງປະເທດ</option>
+          </select>
+        </label>
+        <label>ສຽງ <select id="ttsVoice"></select></label>
+        <label>ຄວາມໄວ <output id="ttsRateOut">0%</output>
+          <input type="range" id="ttsRate" min="-50" max="50" step="5" value="0">
+        </label>
+        <label id="ttsPitchWrap">ສຽງສູງ-ຕ່ຳ <output id="ttsPitchOut">0%</output>
+          <input type="range" id="ttsPitch" min="-20" max="20" step="2" value="0">
+        </label>
+      </div>
+
+      <div class="card">
+        <h4>ພາກຈາກຂໍ້ຄວາມ</h4>
+        <textarea id="ttsText" rows="5" lang="lo" placeholder="ສະບາຍດີທຸກຄົນ ຍິນດີຕ້ອນຮັບສູ່ຊ່ອງຂອງພວກເຮົາ..."></textarea>
+        <div class="row">
+          <button id="ttsPreviewBtn">▶ ຟັງຕົວຢ່າງ</button>
+          <button id="ttsAddBtn" class="primary">+ ເພີ່ມທີ່ເສັ້ນເວລາ</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>ພາກຕາມຊັບໄຕເຕິ້ນ</h4>
+        <p class="hint">ສ້າງສຽງພາກໃຫ້ທຸກແຖວຊັບ ແລະ ວາງໃຫ້ກົງກັບເວລາຂອງແຕ່ລະແຖວ.</p>
+        <label class="check"><input type="checkbox" id="ttsFit" checked> ເລັ່ງສຽງອັດຕະໂນມັດ ຖ້າຍາວເກີນແຖວຖັດໄປ</label>
+        <label class="check"><input type="checkbox" id="ttsDuck" checked> ຫຼຸດສຽງວິດີໂອເດີມລົງເຫຼືອ 20%</label>
+        <label class="check"><input type="checkbox" id="ttsUseTr"> ໃຊ້ແຖວຄຳແປ (ພາກເປັນພາສາອື່ນ)</label>
+        <label class="check"><input type="checkbox" id="ttsReplace" checked> ແທນທີ່ສຽງພາກຕາມຊັບເກົ່າ</label>
+        <button id="ttsSubsBtn" class="primary wide">🎙 ພາກສຽງຕາມຊັບທັງໝົດ</button>
+      </div>
+      <p class="hint">ເມື່ອໃຊ້ໃນໂຄສະນາ ຫຼື ຂ່າວ ຄວນບອກຜູ້ຊົມວ່າເປັນສຽງ AI.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-subs" hidden>
+      <div class="card compact">
+        <div class="row">
+          <input id="findInput" lang="lo" placeholder="ຊອກຫາ">
+          <input id="replaceInput" lang="lo" placeholder="ແທນທີ່ດ້ວຍ">
+          <button id="replaceBtn">ແທນທີ່</button>
+        </div>
+        <div class="row tools">
+          <button id="fixLaoBtn" title="ແກ້ ໍ+າ → ຳ ແລະ ຍະຫວ່າງເກີນ">ແກ້ສະຫຼະ ຳ</button>
+          <button id="modernHoBtn" title="ຫນ → ໜ, ຫມ → ໝ">ຫນ→ໜ</button>
+          <button id="laoDigitsBtn">123→໑໒໓</button>
+          <button id="arabicDigitsBtn">໑໒໓→123</button>
+          <button id="clearTrBtn" title="ລຶບແຖວຄຳແປອອກຈາກທຸກຊັບ">ລຶບຄຳແປ</button>
+        </div>
+        <div class="row tools">
+          <label class="inline">ເລື່ອນເວລາ <input id="shiftInput" type="number" step="0.1" value="0.2"> ວິ</label>
+          <button id="shiftBtn">ເລື່ອນ</button>
+          <button id="clearSubsBtn" class="danger">ລຶບທັງໝົດ</button>
+        </div>
+      </div>
+      <div id="subList" class="sub-list"></div>
+    </section>
+  </aside>
+
+  <main class="center">
+    <div id="stage" class="stage" data-aspect="16:9">
+      <canvas id="preview"></canvas>
+    </div>
+    <div class="transport">
+      <span class="time"><b id="timeNow">00:00.00</b> / <span id="timeTotal">00:00.00</span></span>
+      <div class="transport-buttons">
+        <button id="backBtn" class="icon" title="ໄປຕົ້ນ (Home)">⏮</button>
+        <button id="prevFrame" class="icon" title="ຖອຍ 1 ເຟຣມ (←)">◁</button>
+        <button id="playBtn" class="play" title="ຫຼິ້ນ / ຢຸດ (Space)">▶</button>
+        <button id="nextFrame" class="icon" title="ໜ້າ 1 ເຟຣມ (→)">▷</button>
+      </div>
+      <button id="fullscreenBtn" class="icon" title="ເຕັມຈໍ">⛶</button>
+    </div>
+  </main>
+
+  <aside class="right">
+    <div id="props" class="props"></div>
+  </aside>
+
+  <footer class="bottom">
+    <div class="tl-toolbar">
+      <button id="splitBtn" title="ຕັດ (S / Ctrl+B)">✂ ຕັດ</button>
+      <button id="deleteBtn" title="ລຶບ (Delete)">🗑 ລຶບ</button>
+      <button id="dupBtn" title="ສຳເນົາ (Ctrl+D)">⧉ ສຳເນົາ</button>
+      <button id="addSubBtn" title="ເພີ່ມຊັບທີ່ເສັ້ນເວລາ (T)">+ ຊັບ</button>
+      <div class="spacer"></div>
+      <span class="hint">Space ຫຼິ້ນ · S ຕັດ · T ເພີ່ມຊັບ · Ctrl+ລໍ້ເມົ້າ ຊູມ</span>
+      <label class="zoom">🔍 <input id="zoomRange" type="range" min="4" max="400" value="60"></label>
+    </div>
+    <div id="timeline" class="timeline"></div>
+  </footer>
+</div>
+
+<div id="busy" class="overlay" hidden>
+  <div class="busy-card">
+    <div class="spinner"></div>
+    <div id="busyMsg">...</div>
+    <div class="bar"><div id="busyBar"></div></div>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>⚙ ຕັ້ງຄ່າ AI ສ້າງຊັບ</h3>
+    <p class="hint">ການສ້າງຊັບ ແລະ ແປຊັບດ້ວຍ AI ໃຊ້ OpenAI (Whisper ຮອງຮັບພາສາລາວ). ສ້າງ API Key ໄດ້ທີ່
+      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>
+      (ຄ່າໃຊ້ຈ່າຍປະມານ $0.006 ຕໍ່ນາທີ). Key ຖືກເກັບໄວ້ທີ່ເຊີບເວີເທົ່ານັ້ນ.</p>
+    <label>OpenAI API Key <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"></label>
+    <p id="apiKeyEnvNote" class="hint" hidden>ໃຊ້ Key ຈາກ environment variable <code>OPENAI_API_KEY</code> ຢູ່.</p>
+    <h4>🎙 ສຽງພາກລາວ (Microsoft Azure Speech)</h4>
+    <p class="hint">ມີສຽງລາວແທ້ 2 ສຽງ (ຍິງ/ຊາຍ). ສ້າງ Speech resource ທີ່
+      <a href="https://portal.azure.com" target="_blank" rel="noopener">portal.azure.com</a>
+      ແລ້ວເອົາ Key ແລະ Region ມາໃສ່. ແຜນຟຣີໃຊ້ໄດ້ 500,000 ຕົວອັກສອນ/ເດືອນ.</p>
+    <label>Azure Speech Key <input id="azureKeyInput" type="password" autocomplete="off"></label>
+    <label>Region <input id="azureRegionInput" placeholder="southeastasia" autocomplete="off"></label>
+    <p class="hint">ບໍ່ມີ Key? ໃຊ້ "ຈັດເວລາຊັບຈາກບົດ" ທີ່ເຮັດວຽກໃນເຄື່ອງໄດ້ເລີຍ.</p>
+    <div class="modal-actions">
+      <button data-close>ປິດ</button>
+      <button id="saveSettingsBtn" class="primary">ບັນທຶກ</button>
+    </div>
+  </div>
+</div>
+
+<div id="exportModal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>⤓ ສົ່ງອອກວິດີໂອ</h3>
+    <label>ຮູບແບບໄຟລ໌ <select id="exportFormat"></select></label>
+    <label>ຄວາມລະອຽດ <select id="exportRes"></select></label>
+    <p id="exportInfo" class="hint"></p>
+    <p class="hint">ຊັບໄຕເຕິ້ນ ແລະ ຂໍ້ຄວາມຈະຖືກຝັງໃນວິດີໂອ. ຖ້າຕ້ອງການຊັບແຍກ ໃຫ້ສົ່ງອອກ .srt ອີກເທື່ອ.</p>
+    <div id="exportProgress" class="export-progress" hidden>
+      <div class="bar"><div id="exportBar"></div></div>
+      <span id="exportPct">0%</span>
+    </div>
+    <div class="modal-actions">
+      <button id="cancelExportBtn">ຍົກເລີກ</button>
+      <button id="startExportBtn" class="primary">ເລີ່ມສົ່ງອອກ</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+<div class="drop-hint">ວາງໄຟລ໌ເພື່ອນຳເຂົ້າ</div>
+
+<script type="module" src="js/editor/main.js"></script>
+</body>
+</html>
