@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const { router: authRouter } = require('./routes/auth');
 const apiRouter = require('./routes/api');
 const webhooksRouter = require('./routes/webhooks');
+const editorRouter = require('./routes/editor');
 const store = require('./services/store');
 const { load } = require('./db');
 
@@ -28,6 +29,7 @@ app.use(session({
 app.use('/webhook', webhooksRouter);
 
 app.use('/api/auth', authRouter);
+app.use('/api/editor', editorRouter);
 app.use('/api', apiRouter);
 
 function hasAdmin() {
@@ -45,6 +47,13 @@ app.get('/login.html', (req, res, next) => {
   if (req.session.adminId) return res.redirect('/');
   next();
 });
+
+// The video editor sits behind the same admin login as the inbox.
+app.get('/editor.html', (req, res, next) => {
+  if (!req.session.adminId) return res.redirect(hasAdmin() ? '/login.html' : '/setup.html');
+  next();
+});
+app.get('/editor', (req, res) => res.redirect('/editor.html'));
 
 app.use(express.static(path.join(__dirname, 'public')));
 

@@ -17,6 +17,9 @@ function defaultData() {
       webhook_verify_token: 'change_this_verify_token',
       graph_api_version: 'v21.0'
     },
+    editor: {
+      openai_api_key: ''
+    },
     conversations: [],
     messages: [],
     nextConvId: 1,
