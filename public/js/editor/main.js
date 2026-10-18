@@ -543,7 +543,12 @@ async function refreshStatus() {
     $('#apiKeyEnvNote').hidden = !s.fromEnv;
     const link = $('#openSettings2');
     if (link) link.onclick = e => { e.preventDefault(); openModal('settingsModal'); };
-  } catch (e) { /* offline */ }
+  } catch (e) {
+    // opened without the LaoCut server (e.g. as a static page): editing still works
+    const msg = '<span class="dot"></span> ບໍ່ໄດ້ເຊື່ອມຕໍ່ເຊີບເວີ — ຟັງຊັນ AI ໃຊ້ບໍ່ໄດ້, ການຕັດຕໍ່ອື່ນໆໃຊ້ໄດ້ປົກກະຕິ';
+    $('#aiStatus').innerHTML = msg;
+    $('#ttsStatus').innerHTML = msg;
+  }
 }
 
 function applyGeneratedSubs(segs, replace) {
