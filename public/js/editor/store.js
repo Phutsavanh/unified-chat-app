@@ -41,7 +41,7 @@ function emptyProject() {
   return {
     name: 'ໂປຣເຈັກໃໝ່',
     aspect: '16:9',
-    tracks: { video: [], audio: [], text: [], subs: [] },
+    tracks: { video: [], audio: [], text: [], subs: [], stickers: [], effects: [] },
     subStyle: { ...DEFAULT_SUB_STYLE }
   };
 }
@@ -101,6 +101,7 @@ function fixSelection() {
   const t = state.project.tracks;
   t.video = t.video.filter(c => state.media.has(c.mediaId));
   t.audio = t.audio.filter(c => state.media.has(c.mediaId));
+  t.stickers = t.stickers.filter(c => c.kind !== 'image' || state.media.has(c.mediaId));
   if (state.selection && !findClip(state.selection.track, state.selection.id)) state.selection = null;
 }
 
@@ -138,6 +139,8 @@ export function totalDuration() {
   for (const c of tracks.audio) d = Math.max(d, c.start + clipDuration(c));
   for (const c of tracks.text) d = Math.max(d, c.end);
   for (const c of tracks.subs) d = Math.max(d, c.end);
+  for (const c of tracks.stickers) d = Math.max(d, c.end);
+  for (const c of tracks.effects) d = Math.max(d, c.end);
   return d;
 }
 
@@ -191,7 +194,10 @@ function scheduleSave() {
 
 export async function persistMedia(m) {
   try {
-    await tx('media', 'readwrite', s => s.put({ id: m.id, name: m.name, type: m.type, blob: m.blob, hidden: Boolean(m.hidden) }));
+    await tx('media', 'readwrite', s => s.put({
+      id: m.id, name: m.name, type: m.type, blob: m.blob, hidden: Boolean(m.hidden),
+      libId: m.libId, credit: m.credit, license: m.license
+    }));
   } catch (e) {
     console.warn('ບັນທຶກໄຟລ໌ລົງເບົາເຊີບໍ່ໄດ້ (ພື້ນທີ່ອາດເຕັມ)', e);
   }

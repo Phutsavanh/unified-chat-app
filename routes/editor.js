@@ -184,6 +184,80 @@ router.post('/translate', async (req, res) => {
   }
 });
 
+// ---- Online library: openly licensed audio and images from Openverse ----
+// Only CC0, public domain and CC BY (credit required) results are offered.
+const OPENVERSE = 'https://api.openverse.org/v1';
+const LIBRARY_LICENSES = 'cc0,pdm,by';
+const MAX_LIBRARY_FILE = 40 * 1024 * 1024;
+// The file proxy only fetches URLs a recent search returned, so it can't be
+// pointed at arbitrary (internal) addresses.
+const searchedUrls = new Map(); // url → expiry (ms)
+
+function rememberUrl(url) {
+  if (!url || !/^https:\/\//.test(url)) return;
+  if (searchedUrls.size > 5000) {
+    const now = Date.now();
+    for (const [u, exp] of searchedUrls) if (exp < now) searchedUrls.delete(u);
+  }
+  searchedUrls.set(url, Date.now() + 60 * 60 * 1000);
+}
+
+router.get('/library/search', async (req, res) => {
+  const kind = req.query.type === 'image' ? 'images' : 'audio';
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  if (!q) return res.status(400).json({ error: 'ພິມຄຳຄົ້ນຫາກ່ອນ' });
+  const params = new URLSearchParams({ q, license: LIBRARY_LICENSES, page_size: '24', mature: 'false' });
+  if (kind === 'images' && req.query.png) params.set('extension', 'png');
+  try {
+    const r = await fetch(`${OPENVERSE}/${kind}/?${params}`, {
+      headers: { 'User-Agent': 'LaoCut video editor', Accept: 'application/json' },
+      signal: AbortSignal.timeout(20 * 1000)
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: `Openverse: ${data.detail || `HTTP ${r.status}`}` });
+    const results = (data.results || []).filter(x => x.url).map(x => {
+      rememberUrl(x.url);
+      return {
+        id: x.id,
+        title: x.title || 'Untitled',
+        creator: x.creator || '',
+        license: x.license,
+        licenseVersion: x.license_version || '',
+        licenseUrl: x.license_url || '',
+        landing: x.foreign_landing_url || '',
+        source: x.source || x.provider || '',
+        url: x.url,
+        thumb: x.thumbnail || '',
+        duration: x.duration ? x.duration / 1000 : null
+      };
+    });
+    res.json({ results });
+  } catch (e) {
+    res.status(502).json({ error: `ເຊື່ອມຕໍ່ຄັງອອນລາຍບໍ່ໄດ້ (${e.message})` });
+  }
+});
+
+router.get('/library/file', async (req, res) => {
+  const url = String(req.query.url || '');
+  const exp = searchedUrls.get(url);
+  if (!exp || exp < Date.now()) return res.status(403).json({ error: 'ໄຟລ໌ນີ້ບໍ່ໄດ້ມາຈາກການຄົ້ນຫາ — ຄົ້ນຫາໃໝ່ອີກຄັ້ງ' });
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': 'LaoCut video editor' }, signal: AbortSignal.timeout(60 * 1000) });
+    if (!r.ok) return res.status(502).json({ error: `ດາວໂຫຼດບໍ່ໄດ້ (HTTP ${r.status})` });
+    if (Number(r.headers.get('content-length')) > MAX_LIBRARY_FILE) return res.status(413).json({ error: 'ໄຟລ໌ໃຫຍ່ເກີນ 40 MB' });
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of r.body) {
+      size += chunk.length;
+      if (size > MAX_LIBRARY_FILE) return res.status(413).json({ error: 'ໄຟລ໌ໃຫຍ່ເກີນ 40 MB' });
+      chunks.push(chunk);
+    }
+    res.type(r.headers.get('content-type') || 'application/octet-stream').send(Buffer.concat(chunks));
+  } catch (e) {
+    res.status(502).json({ error: `ດາວໂຫຼດບໍ່ໄດ້ (${e.message})` });
+  }
+});
+
 // AI voiceover. Returns MP3 bytes.
 router.post('/tts', async (req, res) => {
   const { engine, voice, text, rate, pitch, lang } = req.body || {};

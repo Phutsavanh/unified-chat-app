@@ -2,8 +2,11 @@
 // Drag a clip to move it, drag its edges to trim, click the ruler to seek.
 import { state, emit, checkpoint, videoLayout, totalDuration, findClip, clipDuration, sortTrack } from './store.js';
 import { fmtTime, clamp } from './util.js';
+import { EFFECTS, BADGES, TRANSITIONS } from './library/visual.js';
 
 export const TRACKS = [
+  { key: 'effects', label: 'ເອັບເຟັກ', icon: 'sparkles' },
+  { key: 'stickers', label: 'ສະຕິກເກີ', icon: 'smile' },
   { key: 'text', label: 'ຂໍ້ຄວາມ', icon: 'type' },
   { key: 'subs', label: 'ຊັບໄຕເຕິ້ນ', icon: 'cc' },
   { key: 'video', label: 'ວິດີໂອຫຼັກ', icon: 'film' },
@@ -13,9 +16,10 @@ export const TRACKS = [
 const MIN_LEN = 0.1;
 
 export class Timeline {
-  constructor(root, { seek, onDropMedia }) {
+  constructor(root, { seek, onDropMedia, onTransitionClick }) {
     this.root = root;
     this.seek = seek;
+    this.onTransitionClick = onTransitionClick;
     this.onDropMedia = onDropMedia;
     root.innerHTML = `
       <div class="tl-labels">
@@ -65,18 +69,31 @@ export class Timeline {
       return mk('video', l.clip, l.start, l.end, `${m ? m.name : '?'} · ${fmtTime(l.end - l.start)}`, bg);
     }).join('') || `<div class="tl-empty">ລາກວິດີໂອ ຫຼື ຮູບ ມາວາງບ່ອນນີ້</div>`;
 
-    // overlapping audio (music + voiceover) stacks into lanes
-    const { lane, count } = audioLanes(state.project.tracks.audio);
-    const laneH = 30;
-    const rowH = `${Math.max(40, count * laneH + 8)}px`;
-    this.rows.audio.style.height = rowH;
-    this.root.querySelector('.tl-label.tl-row-audio').style.height = rowH;
-    this.rows.audio.innerHTML = state.project.tracks.audio.map(c => {
-      const m = state.media.get(c.mediaId);
-      const pos = count > 1 ? `top:${4 + lane.get(c.id) * laneH}px;bottom:auto;height:${laneH - 4}px;` : '';
-      return mk('audio', c, c.start, c.start + clipDuration(c), m ? m.name : '?', pos);
-    }).join('');
-    this.rows.text.innerHTML = state.project.tracks.text.map(c => mk('text', c, c.start, c.end, c.text)).join('');
+    // overlapping items (music + voiceover, several stickers...) stack into lanes
+    const laned = (key, end, label) => {
+      const clips = state.project.tracks[key];
+      const { lane, count } = lanes(clips, end);
+      const laneH = 30;
+      const rowH = `${Math.max(42, count * laneH + 8)}px`;
+      this.rows[key].style.height = rowH;
+      this.root.querySelector(`.tl-label.tl-row-${key}`).style.height = rowH;
+      this.rows[key].innerHTML = clips.map(c => {
+        const pos = count > 1 ? `top:${4 + lane.get(c.id) * laneH}px;bottom:auto;height:${laneH - 4}px;` : '';
+        return mk(key, c, c.start, end(c), label(c), pos);
+      }).join('');
+    };
+    laned('audio', c => c.start + clipDuration(c), c => (state.media.get(c.mediaId) || { name: '?' }).name);
+    laned('text', c => c.end, c => c.text);
+    laned('effects', c => c.end, c => (EFFECTS.find(e => e.id === c.fx) || {}).name || c.fx);
+    laned('stickers', c => c.end, c => (c.kind === 'emoji' ? c.value
+      : c.kind === 'badge' ? (BADGES.find(b => b.id === c.value) || {}).name
+      : (state.media.get(c.mediaId) || {}).name) || 'ສະຕິກເກີ');
+    // transition markers sit on the cut between two main-track clips
+    this.rows.video.insertAdjacentHTML('beforeend', videoLayout().map((l, i) => {
+      if (!i || !l.clip.trans) return '';
+      const name = (TRANSITIONS.find(x => x.id === l.clip.trans.type) || {}).name || '';
+      return `<div class="trans-mark" data-id="${l.clip.id}" title="ທຣານຊິຊັນ: ${escapeHtml(name)}" style="left:${this.px(l.start)}px"></div>`;
+    }).join(''));
     this.rows.subs.innerHTML = state.project.tracks.subs.map(c => mk('subs', c, c.start, c.end, c.text)).join('');
     this.renderPlayhead();
   }
@@ -106,7 +123,7 @@ export class Timeline {
   snapPoints(exclude) {
     const pts = [0, state.time];
     for (const l of videoLayout()) pts.push(l.start, l.end);
-    for (const k of ['audio', 'text', 'subs']) {
+    for (const k of ['audio', 'text', 'subs', 'stickers', 'effects']) {
       for (const c of state.project.tracks[k]) {
         if (c.id === exclude) continue;
         pts.push(c.start, k === 'audio' ? c.start + clipDuration(c) : c.end);
@@ -135,6 +152,13 @@ export class Timeline {
     this.playhead.addEventListener('pointerdown', scrub);
 
     this.inner.addEventListener('pointerdown', e => {
+      const mark = e.target.closest('.trans-mark');
+      if (mark) {
+        state.selection = { track: 'video', id: mark.dataset.id };
+        emit('selection');
+        if (this.onTransitionClick) this.onTransitionClick();
+        return;
+      }
       const clipEl = e.target.closest('.clip');
       if (!clipEl) {
         if (e.target.closest('.tl-row')) {
@@ -270,13 +294,13 @@ export class Timeline {
 }
 
 // Greedy interval partitioning: each clip goes in the first lane that is free.
-function audioLanes(clips) {
+function lanes(clips, end) {
   const ends = [];
   const lane = new Map();
   for (const c of [...clips].sort((a, b) => a.start - b.start)) {
     let i = ends.findIndex(e => e <= c.start + 1e-3);
     if (i < 0) i = ends.length;
-    ends[i] = c.start + clipDuration(c);
+    ends[i] = end(c);
     lane.set(c.id, i);
   }
   return { lane, count: Math.max(1, ends.length) };

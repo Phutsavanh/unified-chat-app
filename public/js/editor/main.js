@@ -8,6 +8,8 @@ import { Timeline, escapeHtml } from './timeline.js';
 import { mixTimelineAudio, transcribe, detectSpeech, alignScript, refineSegments } from './autosub.js';
 import { exportVideo, supportedFormats } from './exporter.js';
 import { initVoiceover } from './voiceover.js';
+import { initLibrary } from './library/panels.js';
+import { EFFECTS, FILTERS, TRANSITIONS } from './library/visual.js';
 import { LAO_FONTS, normalizeLao, toLaoDigits, toArabicDigits, splitAtFraction, hasThaiScript } from './lao.js';
 import { fmtTime, toSRT, toVTT, parseSubtitles, download, clamp } from './util.js';
 
@@ -138,13 +140,18 @@ async function importFiles(files) {
   renderMedia();
 }
 
-// Media made inside the app (AI voiceover). `hidden` keeps per-line clips out
-// of the library; unused hidden files are cleaned up on the next load.
-async function createMedia(blob, name, hidden) {
-  const file = new File([blob], `${name}.mp3`, { type: blob.type || 'audio/mpeg' });
-  const m = { id: newId(), name, type: 'audio', blob: file, url: URL.createObjectURL(file), hidden };
+// Media made or fetched inside the app (voiceover, library sounds, online
+// files). `hidden` keeps per-line clips out of the library; unused hidden
+// files are cleaned up on the next load. `credit` is shown on export.
+const EXT = { 'audio/wav': 'wav', 'audio/mpeg': 'mp3', 'image/png': 'png', 'image/jpeg': 'jpg' };
+async function createMedia(blob, name, opts = {}) {
+  if (typeof opts === 'boolean') opts = { hidden: opts };
+  const { type = 'audio', hidden = false, ...extra } = opts;
+  const mime = blob.type || (type === 'image' ? 'image/png' : 'audio/mpeg');
+  const file = new File([blob], `${name}.${EXT[mime] || mime.split('/')[1] || 'bin'}`, { type: mime });
+  const m = { id: newId(), name, type, blob: file, url: URL.createObjectURL(file), hidden, ...extra };
   await probe(m);
-  if (m.broken) throw new Error('ອ່ານໄຟລ໌ສຽງທີ່ສ້າງບໍ່ໄດ້');
+  if (m.broken || (type === 'image' && !m.width)) throw new Error('ອ່ານໄຟລ໌ນີ້ບໍ່ໄດ້');
   return m;
 }
 
@@ -294,6 +301,7 @@ function select(track, id) {
 }
 
 const FONT_OPTIONS = LAO_FONTS.map(f => [f.family, f.label]);
+const STICKER_ANIMS = [['none', 'ບໍ່ມີ'], ['pop', 'ເດັ້ງເຂົ້າ'], ['bounce', 'ກະໂດດ'], ['pulse', 'ເຕັ້ນ'], ['float', 'ລອຍ'], ['wiggle', 'ສັ່ນໄປມາ'], ['spin', 'ໝູນ']];
 const ANIMS = [['none', 'ບໍ່ມີ'], ['fade', 'ຈາງເຂົ້າ-ອອກ'], ['pop', 'ເດັ້ງ'], ['type', 'ພິມດີດ (ທີລະຕົວ)']];
 
 function styleFields(isSub) {
@@ -397,7 +405,12 @@ function renderProps() {
       { k: 'fit', label: 'ການຈັດວາງ', type: 'select', options: [['contain', 'ພໍດີ (ເຫັນທັງໝົດ)'], ['cover', 'ເຕັມຈໍ (ຕັດຂອບ)']] },
       { k: 'bg', label: 'ພື້ນຫຼັງ', type: 'select', options: [['blur', 'ມົວ (ແບບ CapCut)'], ['black', 'ສີດຳ']] }
     ];
-    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}</div>`,
+    const look = [
+      c.filter && `ຟິວເຕີ: ${(FILTERS.find(f => f.id === c.filter.id) || {}).name}`,
+      c.adj && Object.values(c.adj).some(Boolean) && 'ປັບແຕ່ງສີແລ້ວ',
+      c.trans && `ທຣານຊິຊັນ: ${(TRANSITIONS.find(x => x.id === c.trans.type) || {}).name}`
+    ].filter(Boolean).join(' · ');
+    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}${look ? `<br>${escapeHtml(look)}` : ''}</div>`,
       form(fields, c, k => { if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0); }));
   } else if (sel.track === 'audio') {
     const m = state.media.get(c.mediaId);
@@ -410,6 +423,23 @@ function renderProps() {
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
       { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c, fixTiming('text', c)),
       `<div class="props-section"><h4>ຮູບແບບ</h4>`, form(styleFields(false), c.style), `</div>`);
+  } else if (sel.track === 'stickers') {
+    title = 'ສະຕິກເກີ';
+    parts.push(form([
+      { k: 'size', label: 'ຂະໜາດ', type: 'range', min: 0.05, max: 1, step: 0.01 },
+      { k: 'rot', label: 'ໝູນ (ອົງສາ)', type: 'range', min: -180, max: 180, step: 1 },
+      { k: 'x', label: 'ຕຳແໜ່ງ ຊ້າຍ-ຂວາ', type: 'range', min: 0, max: 1, step: 0.01 },
+      { k: 'y', label: 'ຕຳແໜ່ງ ເທິງ-ລຸ່ມ', type: 'range', min: 0, max: 1, step: 0.01 },
+      { k: 'anim', label: 'ແອນິເມຊັນ', type: 'select', options: STICKER_ANIMS },
+      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }
+    ], c, fixTiming('stickers', c)));
+  } else if (sel.track === 'effects') {
+    title = 'ເອັບເຟັກ';
+    parts.push(form([
+      { k: 'fx', label: 'ເອັບເຟັກ', type: 'select', options: EFFECTS.map(e => [e.id, e.name]) },
+      { k: 'amount', label: 'ຄວາມແຮງ', type: 'range', min: 0.1, max: 1, step: 0.05 },
+      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }
+    ], c, fixTiming('effects', c)));
   } else if (sel.track === 'subs') {
     title = 'ແຖວຊັບໄຕເຕິ້ນ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
@@ -430,12 +460,13 @@ canvas.addEventListener('pointerdown', e => {
   const hit = player.hitTest((e.clientX - r.left) * sx, (e.clientY - r.top) * sy);
   if (!hit) { select(null); return; }
   select(hit.track, hit.id);
-  const style = hit.track === 'text' ? findClip('text', hit.id).style : state.project.subStyle;
+  const clip = findClip(hit.track, hit.id);
+  const style = hit.track === 'text' ? clip.style : hit.track === 'stickers' ? clip : state.project.subStyle;
   const x0 = e.clientX, y0 = e.clientY, ox = style.x, oy = style.y;
   let moved = false;
   const move = ev => {
     if (!moved) { checkpoint(); moved = true; }
-    if (hit.track === 'text') style.x = clamp(ox + (ev.clientX - x0) / r.width, 0, 1);
+    if (hit.track !== 'subs') style.x = clamp(ox + (ev.clientX - x0) / r.width, 0, 1);
     style.y = clamp(oy + (ev.clientY - y0) / r.height, 0, 1);
   };
   const up = () => {
@@ -837,6 +868,10 @@ $('#exportBtn').addEventListener('click', () => {
   $('#exportInfo').textContent = `ຄວາມຍາວ ${fmtTime(totalDuration())} · ການສົ່ງອອກໃຊ້ເວລາເທົ່າກັບຄວາມຍາວວິດີໂອ — ຫ້າມປິດ ຫຼື ສະຫຼັບໄປແຖບອື່ນ`;
   $('#exportProgress').hidden = true;
   $('#startExportBtn').disabled = !formats.length || totalDuration() <= 0;
+  const used = new Set([...state.project.tracks.video, ...state.project.tracks.audio, ...state.project.tracks.stickers].map(c => c.mediaId));
+  const credits = [...used].map(id => state.media.get(id)).filter(m => m && m.credit && m.license === 'by').map(m => m.credit);
+  $('#creditsBox').hidden = !credits.length;
+  $('#creditsText').value = credits.join('\n');
   openModal('exportModal');
 });
 $('#startExportBtn').addEventListener('click', async () => {
@@ -860,6 +895,10 @@ $('#startExportBtn').addEventListener('click', async () => {
   }
   $('#startExportBtn').disabled = false;
   $('#exportProgress').hidden = true;
+});
+$('#copyCreditsBtn').addEventListener('click', () => {
+  $('#creditsText').select();
+  navigator.clipboard?.writeText($('#creditsText').value).then(() => toast('ກັອບແລ້ວ', 'ok'), () => {});
 });
 $('#cancelExportBtn').addEventListener('click', () => { exportVideo.cancel && exportVideo.cancel(); closeModal('exportModal'); });
 
@@ -888,10 +927,15 @@ $('#dupBtn').addEventListener('click', duplicateSelected);
 $('#addSubBtn').addEventListener('click', addSubtitleAtPlayhead);
 $('#zoomRange').addEventListener('input', e => { state.zoom = Number(e.target.value); emit('zoom'); });
 
-$$('.tabs button').forEach(b => b.addEventListener('click', () => {
-  $$('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-  $$('.tab-panel').forEach(p => p.hidden = p.id !== `tab-${b.dataset.tab}`);
-}));
+const library = initLibrary({ $, $$, toast, busy, createMedia, adoptMedia, select, isOffline: () => offline });
+
+function openTab(tab) {
+  $$('.tabs button').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  $$('.tab-panel').forEach(p => p.hidden = p.id !== `tab-${tab}`);
+  library.refresh(tab);
+}
+$$('.tabs button').forEach(b => b.addEventListener('click', () => openTab(b.dataset.tab)));
+timeline.onTransitionClick = () => openTab('transitions');
 
 document.addEventListener('keydown', e => {
   if (e.target.closest('input, textarea, select, [contenteditable]')) return;
@@ -940,6 +984,7 @@ subscribe(kind => {
   timeline.render();
   renderTransport();
   renderProps();
+  library.refresh();
   if (kind === 'project') { renderTop(); renderSubList(); if (!player.exporting) player.resize(); }
 });
 
@@ -964,9 +1009,10 @@ subscribe(kind => {
     const t = state.project.tracks;
     t.video = t.video.filter(c => state.media.has(c.mediaId));
     t.audio = t.audio.filter(c => state.media.has(c.mediaId));
+    t.stickers = t.stickers.filter(c => c.kind !== 'image' || state.media.has(c.mediaId));
   }
-  // per-line voiceover files no clip uses any more (replaced or deleted)
-  const used = new Set(state.project.tracks.audio.map(c => c.mediaId));
+  // generated/downloaded files (per-line voiceover, sticker images) no clip uses any more
+  const used = new Set([...state.project.tracks.audio, ...state.project.tracks.stickers].map(c => c.mediaId));
   for (const m of [...state.media.values()]) {
     if (m.hidden && !used.has(m.id)) {
       state.media.delete(m.id);

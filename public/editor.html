@@ -39,6 +39,12 @@
     <symbol id="i-start" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8z"/><path d="M5 19V5"/></symbol>
     <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M12.2 6.2 11 5M3 21l9-9"/></symbol>
+    <symbol id="i-trans" viewBox="0 0 24 24"><rect x="2" y="6" width="8" height="12" rx="1.5"/><rect x="14" y="6" width="8" height="12" rx="1.5"/><path d="M10 12h4"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><circle cx="15" cy="9" r="6"/><circle cx="12" cy="15" r="6"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   </defs>
 </svg>
@@ -66,10 +72,16 @@
     <button id="exportBtn" class="primary"><svg class="i"><use href="#i-download"/></svg><span>ສົ່ງອອກ</span></button>
   </header>
 
-  <nav class="rail tabs" aria-label="ເຄື່ອງມື">
+  <nav class="menubar tabs" aria-label="ເຄື່ອງມື">
     <button data-tab="media" class="active"><svg class="i"><use href="#i-film"/></svg><span>ສື່</span></button>
+    <button data-tab="audio"><svg class="i"><use href="#i-music"/></svg><span>ສຽງ</span></button>
     <button data-tab="text"><svg class="i"><use href="#i-type"/></svg><span>ຂໍ້ຄວາມ</span></button>
+    <button data-tab="stickers"><svg class="i"><use href="#i-smile"/></svg><span>ສະຕິກເກີ</span></button>
+    <button data-tab="effects"><svg class="i"><use href="#i-wand"/></svg><span>ເອັບເຟັກ</span></button>
+    <button data-tab="transitions"><svg class="i"><use href="#i-trans"/></svg><span>ທຣານຊິຊັນ</span></button>
     <button data-tab="auto"><svg class="i"><use href="#i-sparkles"/></svg><span>ຊັບ AI</span></button>
+    <button data-tab="filters"><svg class="i"><use href="#i-filter"/></svg><span>ຟິວເຕີ</span></button>
+    <button data-tab="adjust"><svg class="i"><use href="#i-sliders"/></svg><span>ປັບແຕ່ງ</span></button>
     <button data-tab="voice"><svg class="i"><use href="#i-mic"/></svg><span>ສຽງພາກ</span></button>
     <button data-tab="subs"><svg class="i"><use href="#i-cc"/></svg><span>ລາຍການຊັບ</span><b id="subCount" class="badge">0</b></button>
   </nav>
@@ -84,6 +96,96 @@
       </div>
       <div id="mediaList" class="media-grid"></div>
       <p class="hint">ກົດ <b>+</b> ຫຼື ລາກໄຟລ໌ລົງ timeline. ໄຟລ໌ຢູ່ໃນເຄື່ອງຂອງທ່ານເທົ່ານັ້ນ, ບໍ່ໄດ້ອັບໂຫຼດ.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-audio" hidden>
+      <h3 class="panel-title">ສຽງ ແລະ ເພງ</h3>
+      <div class="seg" data-seg="audio">
+        <button data-v="music" class="active">ເພງ</button>
+        <button data-v="sfx">ເອັບເຟັກສຽງ</button>
+        <button data-v="online">ຄົ້ນຫາອອນລາຍ</button>
+      </div>
+      <div data-pane="music">
+        <p class="hint">ເພງສ້າງຂຶ້ນໃນໂປຣແກຣມ — ໃຊ້ໄດ້ຟຣີ ບໍ່ຕິດລິຂະສິດ. ກົດ ▶ ເພື່ອຟັງ, + ເພື່ອເພີ່ມທີ່ເສັ້ນເວລາ.</p>
+        <div id="musicList" class="lib-list"></div>
+      </div>
+      <div data-pane="sfx" hidden>
+        <div id="sfxCats" class="chips"></div>
+        <div id="sfxList" class="lib-list"></div>
+      </div>
+      <div data-pane="online" hidden>
+        <form id="audioSearchForm" class="search">
+          <input id="audioSearch" placeholder="ເຊັ່ນ: piano, whoosh, rain, drum">
+          <button class="primary" aria-label="ຄົ້ນຫາ"><svg class="i"><use href="#i-search"/></svg></button>
+        </form>
+        <p class="hint">ຈາກ Openverse: ສະເພາະໄຟລ໌ CC0 / ສາທາລະນະ / CC BY. ໄຟລ໌ CC BY ຕ້ອງໃສ່ເຄຣດິດ (ໂປຣແກຣມສະແດງໃຫ້ຕອນສົ່ງອອກ).</p>
+        <div id="audioResults" class="lib-list"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-stickers" hidden>
+      <h3 class="panel-title">ສະຕິກເກີ</h3>
+      <div class="seg" data-seg="stickers">
+        <button data-v="emoji" class="active">ອີໂມຈິ</button>
+        <button data-v="badges">ປ້າຍ</button>
+        <button data-v="online">ຄົ້ນຫາຮູບ</button>
+      </div>
+      <div data-pane="emoji">
+        <div id="emojiCats" class="chips"></div>
+        <div id="emojiGrid" class="emoji-grid"></div>
+      </div>
+      <div data-pane="badges" hidden>
+        <div id="badgeGrid" class="tile-grid"></div>
+      </div>
+      <div data-pane="online" hidden>
+        <form id="imageSearchForm" class="search">
+          <input id="imageSearch" placeholder="ເຊັ່ນ: flower, cat, star">
+          <button class="primary" aria-label="ຄົ້ນຫາ"><svg class="i"><use href="#i-search"/></svg></button>
+        </form>
+        <label class="check"><input type="checkbox" id="imagePng" checked> ສະເພາະ PNG (ພື້ນໂປ່ງໃສ)</label>
+        <div id="imageResults" class="tile-grid"></div>
+      </div>
+      <p class="hint">ລາກສະຕິກເກີໃນຈໍເພື່ອຍ້າຍ, ປັບຂະໜາດ/ໝູນ/ແອນິເມຊັນໄດ້ທາງຂວາ.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-effects" hidden>
+      <h3 class="panel-title">ເອັບເຟັກວິດີໂອ</h3>
+      <div id="effectCats" class="chips"></div>
+      <div id="effectGrid" class="tile-grid"></div>
+      <p class="hint">ເອັບເຟັກຖືກເພີ່ມທີ່ເສັ້ນເວລາ (3 ວິ). ລາກຂອບໃນ timeline ເພື່ອປັບຄວາມຍາວ.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-transitions" hidden>
+      <h3 class="panel-title">ທຣານຊິຊັນ</h3>
+      <div class="target" id="transTarget"></div>
+      <label>ໄລຍະເວລາ <output id="transDurOut">0.6 ວິ</output>
+        <input type="range" id="transDur" min="0.2" max="2" step="0.1" value="0.6">
+      </label>
+      <div id="transGrid" class="tile-grid"></div>
+      <div class="row">
+        <button id="transAllBtn">ໃຊ້ກັບທຸກຈຸດຕໍ່</button>
+        <button id="transRemoveBtn" class="danger">ລຶບ</button>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-filters" hidden>
+      <h3 class="panel-title">ຟິວເຕີ</h3>
+      <div class="target" id="filterTarget"></div>
+      <label>ຄວາມເຂັ້ມ <output id="filterAmtOut">100%</output>
+        <input type="range" id="filterAmt" min="0" max="1" step="0.05" value="1">
+      </label>
+      <div id="filterGrid" class="tile-grid"></div>
+      <button id="filterAllBtn" class="wide">ໃຊ້ຟິວເຕີນີ້ກັບທຸກຄລິບ</button>
+    </section>
+
+    <section class="tab-panel" id="tab-adjust" hidden>
+      <h3 class="panel-title">ປັບແຕ່ງສີ</h3>
+      <div class="target" id="adjustTarget"></div>
+      <div id="adjustSliders"></div>
+      <div class="row">
+        <button id="adjustResetBtn">ຄືນຄ່າເດີມ</button>
+        <button id="adjustAllBtn">ໃຊ້ກັບທຸກຄລິບ</button>
+      </div>
     </section>
 
     <section class="tab-panel" id="tab-text" hidden>
@@ -315,6 +417,12 @@
     <label>ຄວາມລະອຽດ <select id="exportRes"></select></label>
     <p id="exportInfo" class="hint"></p>
     <p class="hint">ຊັບໄຕເຕິ້ນ ແລະ ຂໍ້ຄວາມຈະຖືກຝັງໃນວິດີໂອ. ຖ້າຕ້ອງການຊັບແຍກ ໃຫ້ສົ່ງອອກ .srt ອີກເທື່ອ.</p>
+    <div id="creditsBox" hidden>
+      <h4>ເຄຣດິດທີ່ຕ້ອງໃສ່ (CC BY)</h4>
+      <p class="hint">ສຽງ/ຮູບບາງອັນຕ້ອງໃຫ້ເຄຣດິດເຈົ້າຂອງ. ກັອບໄປໃສ່ໃນຄຳອະທິບາຍວິດີໂອ.</p>
+      <textarea id="creditsText" rows="4" readonly></textarea>
+      <button id="copyCreditsBtn">ກັອບເຄຣດິດ</button>
+    </div>
     <div id="exportProgress" class="export-progress" hidden>
       <div class="bar"><div id="exportBar"></div></div>
       <span id="exportPct">0%</span>

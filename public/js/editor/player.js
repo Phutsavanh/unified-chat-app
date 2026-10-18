@@ -4,6 +4,11 @@
 import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay } from './store.js';
 import { wrapText, graphemes, toLaoDigits } from './lao.js';
 import { hexToRgba } from './util.js';
+import {
+  clipLook, drawTints, drawVignette, effectTransform, drawEffectOverlay, transitionState, drawBadge
+} from './library/visual.js';
+
+const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
 export class Player {
   constructor(canvas) {
@@ -172,13 +177,51 @@ export class Player {
     ctx.fillRect(0, 0, W, H);
     this.hitBoxes = [];
 
-    const cur = videoLayout().find(l => t >= l.start && t < l.end);
+    const { effects, stickers } = state.project.tracks;
+    const activeFx = effects.filter(c => t >= c.start && t < c.end);
+
+    // one transform for the video layer: effects (shake, zoom...) + transition
+    const tr = { scale: 1, tx: 0, ty: 0, rot: 0, flip: false };
+    for (const e of activeFx) {
+      const x = effectTransform(e.fx, t - e.start, e.end - e.start, e.amount ?? 1, W, H);
+      tr.scale *= x.scale; tr.tx += x.tx; tr.ty += x.ty; tr.flip = tr.flip !== x.flip;
+    }
+
+    const layout = videoLayout();
+    const idx = layout.findIndex(l => t >= l.start && t < l.end);
+    const cur = layout[idx];
+    let ts = null;
     if (cur) {
+      const tin = cur.clip.trans;
+      const next = layout[idx + 1];
+      const tout = next && next.clip.trans;
+      const lt = t - cur.start;
+      if (tin && idx > 0 && lt < tin.dur / 2) ts = transitionState(tin.type, 1 - lt / (tin.dur / 2), 'in', W, H);
+      else if (tout && cur.end - t < tout.dur / 2) ts = transitionState(tout.type, 1 - (cur.end - t) / (tout.dur / 2), 'out', W, H);
+      if (ts) { tr.scale *= ts.scale; tr.tx += ts.tx; tr.ty += ts.ty; tr.rot += ts.rot; }
+
       const m = state.media.get(cur.clip.mediaId);
       if (m) {
         const el = this.element(m);
         const ready = m.type === 'image' ? el.complete && el.naturalWidth : el.readyState >= 2;
-        if (ready) this.drawMedia(el, m, cur.clip, W, H);
+        if (ready) this.drawMedia(el, m, cur.clip, W, H, tr, ts);
+      }
+    }
+    if (ts && ts.overlay && ts.overlay[1] > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, ts.overlay[1]);
+      ctx.fillStyle = ts.overlay[0];
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+    if (ts && ts.glitch > 0.05) drawEffectOverlay(ctx, this.canvas, 'glitch', t, 0, ts.glitch, W, H);
+
+    for (const e of activeFx) drawEffectOverlay(ctx, this.canvas, e.fx, t - e.start, e.end - e.start, e.amount ?? 1, W, H);
+
+    for (const c of stickers) {
+      if (t >= c.start && t < c.end) {
+        const box = this.drawSticker(c, t - c.start, W, H);
+        if (box) this.hitBoxes.push({ track: 'stickers', id: c.id, box });
       }
     }
 
@@ -211,13 +254,30 @@ export class Player {
     ctx.restore();
   }
 
-  drawMedia(el, m, clip, W, H) {
+  drawMedia(el, m, clip, W, H, tr, ts) {
     const { ctx } = this;
     const sw = m.type === 'image' ? el.naturalWidth : el.videoWidth;
     const sh = m.type === 'image' ? el.naturalHeight : el.videoHeight;
     if (!sw || !sh) return;
     const contain = Math.min(W / sw, H / sh);
     const cover = Math.max(W / sw, H / sh);
+    const look = clipLook(clip, Math.min(W, H) / 720);
+    ctx.save();
+    if (ts && ts.iris < 1) {
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, Math.max(1, Math.hypot(W, H) / 2 * ts.iris), 0, Math.PI * 2);
+      ctx.clip();
+    }
+    if (ts && ts.wipe) {
+      const w = W * Math.abs(ts.wipe);
+      ctx.beginPath();
+      if (ts.wipe > 0) ctx.rect(0, 0, W - w, H); else ctx.rect(w, 0, W - w, H);
+      ctx.clip();
+    }
+    ctx.translate(W / 2 + tr.tx, H / 2 + tr.ty);
+    ctx.rotate(tr.rot);
+    ctx.scale(tr.scale * (tr.flip ? -1 : 1), tr.scale);
+    ctx.translate(-W / 2, -H / 2);
     if ((clip.fit || 'contain') === 'contain' && clip.bg === 'blur' && 'filter' in ctx) {
       ctx.save();
       ctx.filter = `blur(${Math.round(W / 40)}px) brightness(0.7)`;
@@ -227,7 +287,54 @@ export class Player {
     }
     const k = (clip.fit === 'cover') ? cover : contain;
     const dw = sw * k, dh = sh * k;
+    let filter = look.filter;
+    if (ts && ts.blur > 0.3) filter = `${filter === 'none' ? '' : filter} blur(${ts.blur.toFixed(1)}px)`;
+    if ('filter' in ctx) ctx.filter = filter;
     ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    ctx.restore();
+    drawTints(ctx, look.tints, W, H);
+    drawVignette(ctx, look.vignette, W, H);
+  }
+
+  // Stickers: emoji, drawn badges, or an image file. Returns the bounding box.
+  drawSticker(c, local, W, H) {
+    const { ctx } = this;
+    const unit = Math.min(W, H);
+    const size = (c.size ?? 0.3) * unit;
+    let scale = 1, ty = 0, rot = (c.rot || 0) * Math.PI / 180, alpha = Math.min(1, local / 0.15);
+    switch (c.anim) {
+      case 'pop': { const p = Math.min(1, local / 0.3); scale = 0.4 + 0.6 * p + 0.2 * Math.sin(p * Math.PI); break; }
+      case 'bounce': ty = -Math.abs(Math.sin(local * Math.PI * 1.6)) * size * 0.15; break;
+      case 'spin': rot += local * Math.PI; break;
+      case 'pulse': scale = 1 + 0.08 * Math.sin(local * Math.PI * 3); break;
+      case 'float': ty = Math.sin(local * 2) * size * 0.06; rot += Math.sin(local * 1.5) * 0.06; break;
+      case 'wiggle': rot += Math.sin(local * 14) * 0.12; break;
+    }
+    let w = size, h = size;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(c.x * W, c.y * H + ty);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    if (c.kind === 'emoji') {
+      ctx.font = `${size * 0.85}px ${EMOJI_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.value, 0, size * 0.05);
+    } else if (c.kind === 'badge') {
+      h = drawBadge(ctx, c.value, size);
+    } else if (c.kind === 'image') {
+      const m = state.media.get(c.mediaId);
+      const el = m && this.element(m);
+      if (el && el.complete && el.naturalWidth) {
+        const k = size / Math.max(el.naturalWidth, el.naturalHeight);
+        w = el.naturalWidth * k; h = el.naturalHeight * k;
+        ctx.drawImage(el, -w / 2, -h / 2, w, h);
+      }
+    }
+    ctx.restore();
+    w *= scale; h *= scale;
+    return { x: c.x * W - w / 2, y: c.y * H + ty - h / 2, w, h };
   }
 
   // Draws a wrapped, Lao-aware text block. Returns its bounding box.
