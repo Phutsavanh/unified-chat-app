@@ -148,7 +148,13 @@ export class Timeline {
 
     // zoom with ctrl/cmd + wheel
     this.scroll.addEventListener('wheel', e => {
-      if (!(e.ctrlKey || e.metaKey)) return;
+      if (!(e.ctrlKey || e.metaKey)) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          this.scroll.scrollLeft += e.deltaY;
+        }
+        return;
+      }
       e.preventDefault();
       const t = this.clientToTime(e.clientX);
       const before = e.clientX - this.scroll.getBoundingClientRect().left;

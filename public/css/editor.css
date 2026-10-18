@@ -178,6 +178,7 @@ output { color: var(--accent); float: right; }
 .sub-time:hover { color: var(--accent); background: none; }
 .sub-actions button { padding: 0 7px; font-size: 13px; }
 .sub-item textarea { font-size: 15px; }
+.sub-item textarea.sub-tr { margin-top: 4px; font-size: 13px; color: var(--accent); }
 
 /* ---------- preview ---------- */
 .stage {

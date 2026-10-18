@@ -97,6 +97,10 @@ export function redo() {
 }
 
 function fixSelection() {
+  // undo can bring back clips whose media file has since been deleted
+  const t = state.project.tracks;
+  t.video = t.video.filter(c => state.media.has(c.mediaId));
+  t.audio = t.audio.filter(c => state.media.has(c.mediaId));
   if (state.selection && !findClip(state.selection.track, state.selection.id)) state.selection = null;
 }
 
@@ -142,6 +146,11 @@ export function sortTrack(name) {
 }
 
 export function newId() { return uid(); }
+
+// A subtitle may carry a translation (`tr`) shown as a second line.
+export function subDisplay(s) {
+  return s.tr ? `${s.text}\n${s.tr}` : s.text;
+}
 
 // ---- persistence ----
 const DB_NAME = 'lao-cut';

@@ -1,7 +1,7 @@
 // Preview engine: one hidden <video>/<audio> element per media file, kept in
 // sync with the timeline clock and composited onto a canvas together with
 // text overlays and subtitles. The same canvas is recorded for export.
-import { state, ASPECTS, videoLayout, totalDuration, emit } from './store.js';
+import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay } from './store.js';
 import { wrapText, graphemes, toLaoDigits } from './lao.js';
 import { hexToRgba } from './util.js';
 
@@ -25,8 +25,10 @@ export class Player {
 
   resize(scale = 1) {
     const [w, h] = ASPECTS[state.project.aspect] || ASPECTS['16:9'];
-    this.canvas.width = Math.round(w * scale);
-    this.canvas.height = Math.round(h * scale);
+    // assigning width clears the canvas, so only touch it when it changes
+    const W = Math.round(w * scale), H = Math.round(h * scale);
+    if (this.canvas.width !== W) this.canvas.width = W;
+    if (this.canvas.height !== H) this.canvas.height = H;
   }
 
   element(media) {
@@ -184,7 +186,7 @@ export class Player {
     const ss = state.project.subStyle;
     for (const s of state.project.tracks.subs) {
       if (t >= s.start && t < s.end) {
-        const text = ss.laoDigits ? toLaoDigits(s.text) : s.text;
+        const text = ss.laoDigits ? toLaoDigits(subDisplay(s)) : subDisplay(s);
         const box = this.drawText(text, ss, t - s.start, s.end - s.start, W, H);
         if (box) this.hitBoxes.push({ track: 'subs', id: s.id, box });
       }
@@ -233,7 +235,7 @@ export class Player {
     if (st.anim === 'fade') alpha = Math.min(1, local / 0.3, (dur - local) / 0.3);
     if (st.anim === 'pop') {
       const p = Math.min(1, local / 0.25);
-      scale = p < 1 ? 0.6 + 0.5 * Math.sin(p * Math.PI * 0.75) : 1;
+      scale = 0.5 + 0.5 * p + 0.15 * Math.sin(p * Math.PI); // overshoot, lands on 1
       alpha = Math.min(1, local / 0.12);
     }
     if (st.anim === 'type') {

@@ -72,7 +72,13 @@ export function splitPhrases(text, maxChars) {
   for (let i = 0; i < toks.length; i++) {
     const tok = toks[i];
     const len = graphemeLength(tok);
-    const isBreak = /^\s+$/.test(tok) || /^[.,!?;:…ໆ।]+$/.test(tok);
+    // punctuation and the repetition mark ໆ belong to the word before them
+    if (/^[.,!?;:…\u0EC6)"'»]+$/.test(tok) && cur.trim()) {
+      cur += tok;
+      curLen += len;
+      continue;
+    }
+    const isBreak = /^\s+$/.test(tok);
     if (curLen + len > maxChars && cur.trim()) {
       // look back for a soft break inside the current chunk
       const lastSpace = cur.lastIndexOf(' ');
@@ -95,7 +101,9 @@ export function splitPhrases(text, maxChars) {
 }
 
 export function normalizeSpaces(text) {
-  return String(text).replace(/[​‌‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  // keep manual line breaks (two-line subtitles), collapse everything else
+  return String(text).replace(/[\u200b\u200c\u200d\ufeff]/g, '')
+    .replace(/[^\S\n]+/g, ' ').replace(/ *\n\s*/g, '\n').trim();
 }
 
 // Common encoding problems in Lao text from speech-to-text and old fonts.

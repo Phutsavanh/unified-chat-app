@@ -41,8 +41,10 @@ export async function exportVideo(player, { scale = 1, fps = 30, format = null, 
   await new Promise(r => setTimeout(r, 600));
 
   let cancelled = false;
+  let failed = false;
   const done = new Promise(resolve => {
     rec.onstop = resolve;
+    rec.onerror = () => { failed = true; player.pause(); resolve(); };
     player.onEnded = () => rec.state !== 'inactive' && rec.stop();
   });
   const timer = setInterval(() => onProgress && onProgress(state.time / total), 250);
@@ -59,6 +61,7 @@ export async function exportVideo(player, { scale = 1, fps = 30, format = null, 
   state.selection = prevSel;
   player.resize(1);
   stream.getVideoTracks().forEach(t => t.stop());
+  if (failed) throw new Error('ການບັນທຶກວິດີໂອລົ້ມເຫຼວ — ລອງຄວາມລະອຽດຕ່ຳລົງ ຫຼື ຮູບແບບອື່ນ');
   if (cancelled) return null;
   return { blob: new Blob(chunks, { type: chosen[0].split(';')[0] }), ext: chosen[1] };
 }

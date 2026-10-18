@@ -1,6 +1,6 @@
 import {
   state, emit, subscribe, commit, checkpoint, undo, redo, ASPECTS, DEFAULT_TEXT_STYLE,
-  videoLayout, totalDuration, selectedClip, findClip, clipDuration, sortTrack, newId,
+  videoLayout, totalDuration, selectedClip, findClip, clipDuration, sortTrack, newId, subDisplay,
   persistMedia, deleteMedia, loadSaved, loadProject, resetProject
 } from './store.js';
 import { Player } from './player.js';
@@ -53,17 +53,37 @@ function probe(m) {
       return;
     }
     const el = document.createElement(m.type === 'audio' ? 'audio' : 'video');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (!m.duration) m.broken = true;
+      resolve(m);
+    };
+    const timer = setTimeout(finish, 15000);
+    const grabThumb = () => {
+      m.duration = el.duration;
+      if (m.type === 'audio') return finish();
+      m.width = el.videoWidth; m.height = el.videoHeight;
+      el.onseeked = () => { m.thumb = thumbFrom(el, el.videoWidth, el.videoHeight); finish(); };
+      el.currentTime = Math.min(1, m.duration / 2);
+    };
     el.preload = 'auto';
     el.muted = true;
     el.src = m.url;
     el.onloadedmetadata = () => {
-      m.duration = isFinite(el.duration) ? el.duration : 0;
-      if (m.type === 'audio') return resolve(m);
-      m.width = el.videoWidth; m.height = el.videoHeight;
-      el.currentTime = Math.min(1, m.duration / 2);
+      if (isFinite(el.duration)) return grabThumb();
+      // WebM without a duration header: seeking far ahead makes the browser find it
+      el.ontimeupdate = () => {
+        if (!isFinite(el.duration)) return;
+        el.ontimeupdate = null;
+        el.currentTime = 0;
+        grabThumb();
+      };
+      el.currentTime = 1e9;
     };
-    el.onseeked = () => { m.thumb = thumbFrom(el, el.videoWidth, el.videoHeight); resolve(m); };
-    el.onerror = () => { m.broken = true; resolve(m); };
+    el.onerror = () => { m.broken = true; finish(); };
   });
 }
 
@@ -302,8 +322,21 @@ function form(fields, target, onChange) {
       onChange && onChange(k, v);
       emit('edit');
     });
-    root.addEventListener('change', () => emit('project'));
+    root.addEventListener('change', () => {
+      onChange && onChange('change');
+      emit('project');
+    });
   } };
+}
+
+// Start/end typed by hand: keep a sane range and the track in time order.
+function fixTiming(track, c) {
+  return k => {
+    if (k !== 'change') return;
+    c.start = Math.max(0, c.start || 0);
+    if (track !== 'audio' && !(c.end > c.start + 0.1)) c.end = c.start + 0.1;
+    sortTrack(track);
+  };
 }
 
 function renderProps() {
@@ -325,22 +358,23 @@ function renderProps() {
       { k: 'bg', label: 'ພື້ນຫຼັງ', type: 'select', options: [['blur', 'ມົວ (ແບບ CapCut)'], ['black', 'ສີດຳ']] }
     ];
     parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}</div>`,
-      form(fields, c, k => { if (k === 'out') c.out = Math.max(0.1, c.out); }));
+      form(fields, c, k => { if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0); }));
   } else if (sel.track === 'audio') {
     const m = state.media.get(c.mediaId);
     title = 'ສຽງ / ເພງ';
     parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}</div>`,
       form([{ k: 'start', label: 'ເລີ່ມທີ່ (ວິນາທີ)', type: 'time' },
-        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }], c));
+        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }], c, fixTiming('audio', c)));
   } else if (sel.track === 'text') {
     title = 'ຂໍ້ຄວາມ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
-      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c),
+      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c, fixTiming('text', c)),
       `<div class="props-section"><h4>ຮູບແບບ</h4>`, form(styleFields(false), c.style), `</div>`);
   } else if (sel.track === 'subs') {
     title = 'ແຖວຊັບໄຕເຕິ້ນ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
-      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c),
+      ...(c.tr ? [{ k: 'tr', label: 'ຄຳແປ (ແຖວທີສອງ)', type: 'textarea' }] : []),
+      { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c, fixTiming('subs', c)),
       `<div class="props-section"><h4>ຮູບແບບຊັບ (ໃຊ້ກັບທຸກແຖວ)</h4>`, form(styleFields(true), state.project.subStyle), `</div>`);
   }
 
@@ -414,6 +448,8 @@ function splitTrack(tracks, track, id, t) {
     if (track === 'subs') {
       const [first, rest] = splitAtFraction(c.text, (t - c.start) / (c.end - c.start));
       if (first && rest) { c.text = first; b.text = rest; }
+      delete c.tr;
+      delete b.tr;
     }
     c.end = t;
     list.push(b);
@@ -464,14 +500,14 @@ function addSubtitleAtPlayhead() {
 }
 
 // ---------------------------------------------------------------- auto subtitles
-let whisperReady = false;
+let aiReady = false;
 
 async function refreshStatus() {
   try {
     const r = await fetch('/api/editor/status');
     if (r.status === 401) { location.href = '/login.html'; return; }
     const s = await r.json();
-    whisperReady = s.whisper;
+    aiReady = s.whisper;
     $('#aiStatus').innerHTML = s.whisper
       ? '<span class="dot ok"></span> ເຊື່ອມຕໍ່ AI (Whisper) ແລ້ວ'
       : '<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ API Key — <a href="#" id="openSettings2">ຕັ້ງຄ່າ</a>';
@@ -498,7 +534,7 @@ function applyGeneratedSubs(segs, replace) {
 }
 
 $('#autoSubBtn').addEventListener('click', async () => {
-  if (!whisperReady) { openModal('settingsModal'); return; }
+  if (!aiReady) { openModal('settingsModal'); return; }
   const lang = $('#subLang').value;
   const replace = $('#subReplace').checked;
   if (!replace && state.project.tracks.subs.length && !confirm('ຈະເພີ່ມຊັບໃໝ່ໃສ່ບ່ອນທີ່ຍັງວ່າງ. ສືບຕໍ່ບໍ?')) return;
@@ -539,6 +575,48 @@ $('#alignBtn').addEventListener('click', async () => {
   }
 });
 
+const TRANSLATE_BATCH = 60;
+
+$('#translateBtn').addEventListener('click', async () => {
+  if (!aiReady) { openModal('settingsModal'); return; }
+  const subs = state.project.tracks.subs;
+  if (!subs.length) { toast('ຍັງບໍ່ມີຊັບ', 'warn'); return; }
+  const from = $('#subLang').value;
+  const to = $('#trTo').value;
+  const mode = $('#trMode').value;
+  if (from === to) { toast('ພາສາຕົ້ນສະບັບ ແລະ ພາສາປາຍທາງ ຄືກັນ', 'warn'); return; }
+  const ids = subs.map(s => s.id);
+  const lines = subs.map(s => s.text.replace(/\n/g, ' '));
+  try {
+    const out = [];
+    for (let i = 0; i < lines.length; i += TRANSLATE_BATCH) {
+      busy(`ກຳລັງແປ ${i + 1}–${Math.min(i + TRANSLATE_BATCH, lines.length)} / ${lines.length}...`, i / lines.length);
+      const r = await fetch('/api/editor/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, lines: lines.slice(i, i + TRANSLATE_BATCH) })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      out.push(...data.lines);
+    }
+    busy(false);
+    commit(p => {
+      for (const s of p.tracks.subs) {
+        const i = ids.indexOf(s.id);
+        if (i < 0) continue;
+        const tr = to === 'lo' ? normalizeLao(out[i]) : out[i];
+        if (mode === 'replace') { s.text = tr; delete s.tr; } else s.tr = tr;
+      }
+    });
+    $('[data-tab=subs]').click();
+    toast(`ແປແລ້ວ ${out.length} ແຖວ ✓`, 'ok');
+  } catch (e) {
+    busy(false);
+    toast(e.message, 'error');
+  }
+});
+
 // ---------------------------------------------------------------- subtitle list
 function renderSubList() {
   const subs = state.project.tracks.subs;
@@ -553,6 +631,7 @@ function renderSubList() {
         </span>
       </div>
       <textarea rows="2" lang="lo" data-act="text">${escapeHtml(s.text)}</textarea>
+      ${s.tr ? `<textarea rows="1" class="sub-tr" data-act="tr" title="ຄຳແປ">${escapeHtml(s.tr)}</textarea>` : ''}
     </div>`).join('')
     : '<div class="empty-hint">ຍັງບໍ່ມີຊັບ. ໃຊ້ແຖບ "ສ້າງຊັບອັດຕະໂນມັດ" ຫຼື ກົດ "+ ຊັບ" ທີ່ timeline</div>';
   highlightActiveSub(true);
@@ -589,23 +668,25 @@ $('#subList').addEventListener('click', e => {
     if (i < list.length - 1) commit(() => {
       const n = list[i + 1];
       s.text = `${s.text} ${n.text}`.trim();
+      if (s.tr || n.tr) s.tr = `${s.tr || ''} ${n.tr || ''}`.trim();
       s.end = n.end;
       list.splice(i + 1, 1);
     });
   }
 });
 $('#subList').addEventListener('focusin', e => {
-  if (e.target.dataset.act !== 'text') return;
+  if (e.target.dataset.act !== 'text' && e.target.dataset.act !== 'tr') return;
   const id = e.target.closest('.sub-item').dataset.id;
   subTyping = id;
   const s = findClip('subs', id);
   if (state.time < s.start || state.time >= s.end) player.seek(s.start + 0.01);
 });
 $('#subList').addEventListener('input', e => {
-  if (e.target.dataset.act !== 'text') return;
+  const act = e.target.dataset.act;
+  if (act !== 'text' && act !== 'tr') return;
   const s = findClip('subs', e.target.closest('.sub-item').dataset.id);
   if (subTyping) { checkpoint(); subTyping = null; }
-  s.text = e.target.value;
+  s[act] = e.target.value;
   emit('edit');
 });
 
@@ -631,6 +712,10 @@ $('#fixLaoBtn').addEventListener('click', () => mapSubs(t => normalizeLao(t), '�
 $('#modernHoBtn').addEventListener('click', () => mapSubs(t => normalizeLao(t, { modernHoLetters: true }), 'ປ່ຽນ ຫນ/ຫມ → ໜ/ໝ ແລ້ວ'));
 $('#laoDigitsBtn').addEventListener('click', () => mapSubs(toLaoDigits, 'ປ່ຽນເປັນເລກລາວແລ້ວ'));
 $('#arabicDigitsBtn').addEventListener('click', () => mapSubs(toArabicDigits, 'ປ່ຽນເປັນເລກອາຣັບແລ້ວ'));
+$('#clearTrBtn').addEventListener('click', () => {
+  commit(p => { for (const s of p.tracks.subs) delete s.tr; });
+  toast('ລຶບຄຳແປແລ້ວ');
+});
 $('#shiftBtn').addEventListener('click', () => {
   const d = Number($('#shiftInput').value) || 0;
   commit(p => { for (const s of p.tracks.subs) { s.start = Math.max(0, s.start + d); s.end = Math.max(s.start + 0.1, s.end + d); } });
@@ -650,11 +735,11 @@ $('#importSrtBtn').addEventListener('click', () => $('#srtInput').click());
 $('#srtInput').addEventListener('change', e => { if (e.target.files[0]) importSubtitleFile(e.target.files[0]); e.target.value = ''; });
 const subsForExport = () => {
   const digits = state.project.subStyle.laoDigits;
-  return state.project.tracks.subs.map(s => ({ ...s, text: digits ? toLaoDigits(s.text) : s.text }));
+  return state.project.tracks.subs.map(s => ({ ...s, text: digits ? toLaoDigits(subDisplay(s)) : subDisplay(s) }));
 };
 $('#exportSrtBtn').addEventListener('click', () => {
   if (!state.project.tracks.subs.length) return toast('ຍັງບໍ່ມີຊັບ', 'warn');
-  download(new Blob(['﻿' + toSRT(subsForExport())], { type: 'text/plain;charset=utf-8' }), `${state.project.name}.srt`);
+  download(new Blob(['\ufeff' + toSRT(subsForExport())], { type: 'text/plain;charset=utf-8' }), `${state.project.name}.srt`);
 });
 $('#exportVttBtn').addEventListener('click', () => {
   if (!state.project.tracks.subs.length) return toast('ຍັງບໍ່ມີຊັບ', 'warn');
@@ -683,7 +768,7 @@ $('#exportBtn').addEventListener('click', () => {
   const [w, h] = ASPECTS[state.project.aspect];
   $('#exportRes').innerHTML = [[1, 'ມາດຕະຖານ'], [1.5, 'ຄົມຊັດ'], [0.5, 'ໄຟລ໌ນ້ອຍ']].map(([s, l]) =>
     `<option value="${s}">${l} — ${Math.round(w * s)}×${Math.round(h * s)}</option>`).join('');
-  $('#exportInfo').textContent = `ຄວາມຍາວ ${fmtTime(totalDuration())} · ການສົ່ງອອກໃຊ້ເວລາເທົ່າກັບຄວາມຍາວວິດີໂອ (ຫ້າມປິດແຖບນີ້)`;
+  $('#exportInfo').textContent = `ຄວາມຍາວ ${fmtTime(totalDuration())} · ການສົ່ງອອກໃຊ້ເວລາເທົ່າກັບຄວາມຍາວວິດີໂອ — ຫ້າມປິດ ຫຼື ສະຫຼັບໄປແຖບອື່ນ`;
   $('#exportProgress').hidden = true;
   $('#startExportBtn').disabled = !formats.length || totalDuration() <= 0;
   openModal('exportModal');
@@ -737,8 +822,13 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+  if (!$('#busy').hidden || $$('.modal').some(m => !m.hidden)) return;
   const mod = e.ctrlKey || e.metaKey;
-  if (e.code === 'Space') { e.preventDefault(); player.toggle(); }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (e.target.tagName === 'BUTTON') e.target.blur();
+    player.toggle();
+  }
   else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
   else if (mod && e.key.toLowerCase() === 'b' || (!mod && e.key.toLowerCase() === 's')) { e.preventDefault(); splitAtPlayhead(); }
@@ -774,7 +864,7 @@ subscribe(kind => {
   timeline.render();
   renderTransport();
   renderProps();
-  if (kind === 'project') { renderTop(); renderSubList(); player.resize(); }
+  if (kind === 'project') { renderTop(); renderSubList(); if (!player.exporting) player.resize(); }
 });
 
 // ---------------------------------------------------------------- boot

@@ -80,6 +80,30 @@
       </div>
 
       <div class="card">
+        <h4>🌐 ແປຊັບ (AI)</h4>
+        <label>ແປເປັນພາສາ
+          <select id="trTo">
+            <option value="en" selected>English</option>
+            <option value="th">ພາສາໄທ</option>
+            <option value="lo">ພາສາລາວ</option>
+            <option value="zh">中文</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="ko">한국어</option>
+            <option value="ja">日本語</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+        <label>ຮູບແບບ
+          <select id="trMode">
+            <option value="below" selected>ສອງພາສາ (ຄຳແປຢູ່ແຖວລຸ່ມ)</option>
+            <option value="replace">ແທນທີ່ຂໍ້ຄວາມເດີມ</option>
+          </select>
+        </label>
+        <button id="translateBtn" class="wide">🌐 ແປຊັບທັງໝົດ</button>
+        <p class="hint">ພາສາຕົ້ນສະບັບ = "ພາສາທີ່ເວົ້າໃນວິດີໂອ" ຂ້າງເທິງ. ແປຊ້ຳໄດ້, ຄຳແປເກົ່າຈະຖືກແທນທີ່.</p>
+      </div>
+
+      <div class="card">
         <h4>🎙 ຈັດເວລາຊັບຈາກບົດ (ບໍ່ຕ້ອງໃຊ້ AI)</h4>
         <p class="hint">ວາງບົດເວົ້າພາສາລາວ ແລ້ວໂປຣແກຣມຈະຈັບຈັງຫວະສຽງເວົ້າ ແລະ ວາງຊັບໃຫ້ອັດຕະໂນມັດ.
           ຖ້າປະວ່າງ ຈະສ້າງຊ່ອງວ່າງຕາມສຽງເວົ້າໃຫ້ພິມເອງ.</p>
@@ -110,6 +134,7 @@
           <button id="modernHoBtn" title="ຫນ → ໜ, ຫມ → ໝ">ຫນ→ໜ</button>
           <button id="laoDigitsBtn">123→໑໒໓</button>
           <button id="arabicDigitsBtn">໑໒໓→123</button>
+          <button id="clearTrBtn" title="ລຶບແຖວຄຳແປອອກຈາກທຸກຊັບ">ລຶບຄຳແປ</button>
         </div>
         <div class="row tools">
           <label class="inline">ເລື່ອນເວລາ <input id="shiftInput" type="number" step="0.1" value="0.2"> ວິ</label>
@@ -166,7 +191,7 @@
 <div id="settingsModal" class="modal" hidden>
   <div class="modal-card">
     <h3>⚙ ຕັ້ງຄ່າ AI ສ້າງຊັບ</h3>
-    <p class="hint">ການສ້າງຊັບດ້ວຍ AI ໃຊ້ OpenAI Whisper ທີ່ຮອງຮັບພາສາລາວ. ສ້າງ API Key ໄດ້ທີ່
+    <p class="hint">ການສ້າງຊັບ ແລະ ແປຊັບດ້ວຍ AI ໃຊ້ OpenAI (Whisper ຮອງຮັບພາສາລາວ). ສ້າງ API Key ໄດ້ທີ່
       <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>
       (ຄ່າໃຊ້ຈ່າຍປະມານ $0.006 ຕໍ່ນາທີ). Key ຖືກເກັບໄວ້ທີ່ເຊີບເວີເທົ່ານັ້ນ.</p>
     <label>OpenAI API Key <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"></label>
