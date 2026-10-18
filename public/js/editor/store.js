@@ -42,6 +42,7 @@ function emptyProject() {
     name: 'ໂປຣເຈັກໃໝ່',
     aspect: '16:9',
     tracks: { video: [], audio: [], text: [], subs: [], stickers: [], effects: [] },
+    trackState: {},
     subStyle: { ...DEFAULT_SUB_STYLE }
   };
 }
@@ -114,7 +115,17 @@ export function selectedClip() {
   return state.selection ? findClip(state.selection.track, state.selection.id) : null;
 }
 
-export function clipDuration(c) { return c.out - c.in; }
+// timeline length of a clip: source range played at its speed
+export function clipDuration(c) { return (c.out - c.in) / (c.speed || 1); }
+
+// per-track hide / mute / lock (CapCut-style track header buttons)
+export function trackFlag(track, flag) {
+  const ts = state.project.trackState;
+  return Boolean(ts && ts[track] && ts[track][flag]);
+}
+
+export const DEFAULT_TF = { scale: 1, x: 0, y: 0, rot: 0, opacity: 1, flip: false };
+export const DEFAULT_ANIM = { inType: 'none', inDur: 0.5, outType: 'none', outDur: 0.5 };
 
 // The main video track is magnetic (no gaps), like CapCut: start times are
 // derived from order.
@@ -188,7 +199,9 @@ let saveTimer = null;
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    tx('project', 'readwrite', s => s.put(snapshot(), 'current')).catch(() => {});
+    tx('project', 'readwrite', s => s.put(snapshot(), 'current'))
+      .then(() => { state.savedAt = new Date(); emit('saved'); })
+      .catch(() => {});
   }, 800);
 }
 

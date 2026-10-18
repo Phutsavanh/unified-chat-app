@@ -46,6 +46,7 @@ export async function mixTimelineAudio({ includeMusic = false, onProgress = () =
     const g = ctx.createGain();
     g.gain.value = Math.min(2, j.clip.volume ?? 1) || 0;
     src.connect(g).connect(ctx.destination);
+    src.playbackRate.value = j.clip.speed || 1;
     src.start(j.start, j.clip.in, j.clip.out - j.clip.in);
   }
   if (!any) throw new Error('ບໍ່ພົບສຽງໃນວິດີໂອ (ຫຼື ເບົາເຊີອ່ານໄຟລ໌ນີ້ບໍ່ໄດ້)');

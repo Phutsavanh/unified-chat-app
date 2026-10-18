@@ -1,6 +1,6 @@
 // Multi-track timeline: text, subtitles, main video (magnetic) and audio.
 // Drag a clip to move it, drag its edges to trim, click the ruler to seek.
-import { state, emit, checkpoint, videoLayout, totalDuration, findClip, clipDuration, sortTrack } from './store.js';
+import { state, emit, commit, checkpoint, videoLayout, totalDuration, findClip, clipDuration, sortTrack, trackFlag } from './store.js';
 import { fmtTime, clamp } from './util.js';
 import { EFFECTS, BADGES, TRANSITIONS } from './library/visual.js';
 
@@ -24,7 +24,13 @@ export class Timeline {
     root.innerHTML = `
       <div class="tl-labels">
         <div class="tl-label tl-label-ruler"></div>
-        ${TRACKS.map(t => `<div class="tl-label tl-row-${t.key}"><span class="ico"><svg class="i"><use href="#i-${t.icon}"/></svg></span>${t.label}</div>`).join('')}
+        ${TRACKS.map(t => `<div class="tl-label tl-row-${t.key}" data-track="${t.key}">
+          <span class="ico"><svg class="i"><use href="#i-${t.icon}"/></svg></span><span class="tl-name">${t.label}</span>
+          <span class="tl-ctrls">
+            ${t.key === 'audio' ? '' : `<button data-flag="hidden" title="ເຊື່ອງ / ສະແດງ" aria-label="ເຊື່ອງ"><svg class="i"><use href="#i-eye"/></svg></button>`}
+            ${t.key === 'video' || t.key === 'audio' ? `<button data-flag="mute" title="ປິດ / ເປີດສຽງ" aria-label="ປິດສຽງ"><svg class="i"><use href="#i-volume"/></svg></button>` : ''}
+            <button data-flag="locked" title="ລັອກ / ປົດລັອກ" aria-label="ລັອກ"><svg class="i"><use href="#i-lock"/></svg></button>
+          </span></div>`).join('')}
       </div>
       <div class="tl-scroll">
         <div class="tl-inner">
@@ -39,6 +45,16 @@ export class Timeline {
     this.playhead = root.querySelector('.tl-playhead');
     this.rows = Object.fromEntries(TRACKS.map(t => [t.key, root.querySelector(`.tl-row[data-track=${t.key}]`)]));
     this.bind();
+    root.querySelector('.tl-labels').addEventListener('click', e => {
+      const b = e.target.closest('[data-flag]');
+      if (!b) return;
+      const track = b.closest('[data-track]').dataset.track;
+      const flag = b.dataset.flag;
+      commit(p => {
+        p.trackState = p.trackState || {};
+        p.trackState[track] = { ...p.trackState[track], [flag]: !trackFlag(track, flag) };
+      });
+    });
   }
 
   px(t) { return t * state.zoom; }
@@ -50,6 +66,13 @@ export class Timeline {
   }
 
   render() {
+    for (const t of TRACKS) {
+      const label = this.root.querySelector(`.tl-label[data-track=${t.key}]`);
+      for (const b of label.querySelectorAll('[data-flag]')) b.classList.toggle('on', trackFlag(t.key, b.dataset.flag));
+      const off = trackFlag(t.key, 'hidden') || trackFlag(t.key, 'locked');
+      this.rows[t.key].classList.toggle('dim', off);
+      this.rows[t.key].classList.toggle('locked', trackFlag(t.key, 'locked'));
+    }
     const total = totalDuration();
     const width = this.px(total) + Math.max(this.scroll.clientWidth, 600);
     this.inner.style.width = `${width}px`;
@@ -65,24 +88,31 @@ export class Timeline {
 
     this.rows.video.innerHTML = videoLayout().map(l => {
       const m = state.media.get(l.clip.mediaId);
-      const bg = m && m.thumb ? `background-image:url(${m.thumb});` : '';
+      const w = waveform(m, l.clip.in, l.clip.out, '#9cc3ff');
+      const bg = m && m.thumb
+        ? (w ? `background-image:url('${w}'), url(${m.thumb});background-size:100% 30%, auto 100%;background-position:center bottom, left center;background-repeat:no-repeat, repeat-x;`
+          : `background-image:url(${m.thumb});`)
+        : '';
       return mk('video', l.clip, l.start, l.end, `${m ? m.name : '?'} · ${fmtTime(l.end - l.start)}`, bg);
     }).join('') || `<div class="tl-empty">ລາກວິດີໂອ ຫຼື ຮູບ ມາວາງບ່ອນນີ້</div>`;
 
     // overlapping items (music + voiceover, several stickers...) stack into lanes
-    const laned = (key, end, label) => {
+    const laned = (key, end, label, style = () => '') => {
       const clips = state.project.tracks[key];
       const { lane, count } = lanes(clips, end);
-      const laneH = 30;
-      const rowH = `${Math.max(42, count * laneH + 8)}px`;
+      const laneH = 26;
+      const rowH = `${Math.max(34, count * laneH + 8)}px`;
       this.rows[key].style.height = rowH;
       this.root.querySelector(`.tl-label.tl-row-${key}`).style.height = rowH;
       this.rows[key].innerHTML = clips.map(c => {
         const pos = count > 1 ? `top:${4 + lane.get(c.id) * laneH}px;bottom:auto;height:${laneH - 4}px;` : '';
-        return mk(key, c, c.start, end(c), label(c), pos);
+        return mk(key, c, c.start, end(c), label(c), pos + style(c));
       }).join('');
     };
-    laned('audio', c => c.start + clipDuration(c), c => (state.media.get(c.mediaId) || { name: '?' }).name);
+    laned('audio', c => c.start + clipDuration(c), c => (state.media.get(c.mediaId) || { name: '?' }).name, c => {
+      const w = waveform(state.media.get(c.mediaId), c.in, c.out, '#8ff0bf');
+      return w ? `background-image:url('${w}'), linear-gradient(180deg, #2a6a4c, #22573f);background-size:100% 70%, auto;background-position:center bottom, 0 0;background-repeat:no-repeat;` : '';
+    });
     laned('text', c => c.end, c => c.text);
     laned('effects', c => c.end, c => (EFFECTS.find(e => e.id === c.fx) || {}).name || c.fx);
     laned('stickers', c => c.end, c => (c.kind === 'emoji' ? c.value
@@ -171,6 +201,7 @@ export class Timeline {
       e.preventDefault();
       const track = clipEl.dataset.track;
       const id = clipEl.dataset.id;
+      if (trackFlag(track, 'locked')) return;
       state.selection = { track, id };
       emit('selection');
       const mode = e.target.classList.contains('l') ? 'trimL' : e.target.classList.contains('r') ? 'trimR' : 'move';
@@ -214,6 +245,7 @@ export class Timeline {
     const orig = { ...c };
     const media = state.media.get(c.mediaId);
     const maxSrc = media && media.type !== 'image' ? media.duration : Infinity;
+    const sp = c.speed || 1;
     const pts = this.snapPoints(id);
     let changed = false;
     const origStart = track === 'video' ? videoLayout().find(l => l.clip.id === id).start : c.start;
@@ -229,23 +261,24 @@ export class Timeline {
           clipEl.classList.add('dragging');
           return;
         }
-        if (mode === 'trimL') c.in = clamp(orig.in + dt, 0, orig.out - MIN_LEN);
-        else c.out = clamp(orig.out + dt, orig.in + MIN_LEN, maxSrc);
+        // dt is timeline time; the source moves `speed` times as fast
+        if (mode === 'trimL') c.in = clamp(orig.in + dt * sp, 0, orig.out - MIN_LEN * sp);
+        else c.out = clamp(orig.out + dt * sp, orig.in + MIN_LEN * sp, maxSrc);
       } else if (track === 'audio') {
-        const len = orig.out - orig.in;
+        const len = (orig.out - orig.in) / sp;
         if (mode === 'move') {
           let s = Math.max(0, orig.start + dt);
           const se = this.snap(s + len, pts) - len;
           s = Math.abs(se - s) < Math.abs(this.snap(s, pts) - s) ? se : this.snap(s, pts);
           c.start = Math.max(0, s);
         } else if (mode === 'trimL') {
-          const d = clamp(dt, -orig.in, len - MIN_LEN);
+          const d = clamp(dt, -orig.in / sp, len - MIN_LEN);
           const ns = this.snap(orig.start + d, pts);
-          const dd = clamp(ns - orig.start, -orig.in, len - MIN_LEN);
-          c.in = orig.in + dd; c.start = orig.start + dd;
+          const dd = clamp(ns - orig.start, -orig.in / sp, len - MIN_LEN);
+          c.in = orig.in + dd * sp; c.start = orig.start + dd;
         } else {
           const ne = this.snap(orig.start + len + dt, pts);
-          c.out = clamp(orig.in + (ne - orig.start), orig.in + MIN_LEN, maxSrc);
+          c.out = clamp(orig.in + (ne - orig.start) * sp, orig.in + MIN_LEN * sp, maxSrc);
         }
       } else {
         const len = orig.end - orig.start;
@@ -291,6 +324,32 @@ export class Timeline {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
+}
+
+// Waveform of a media range as an SVG data URI, cached per range. `peaks`
+// holds one max-amplitude value per 1/50 s (computed after import).
+const waveCache = new Map();
+function waveform(m, from, to, color) {
+  if (!m || !m.peaks) return '';
+  const key = `${m.id}:${from.toFixed(2)}:${to.toFixed(2)}:${color}`;
+  if (waveCache.has(key)) return waveCache.get(key);
+  const a = Math.max(0, Math.floor(from * 50)), b = Math.min(m.peaks.length, Math.ceil(to * 50));
+  const n = Math.min(240, Math.max(2, b - a));
+  let top = '', bottom = '';
+  for (let i = 0; i < n; i++) {
+    let peak = 0;
+    const s = a + Math.floor((i / n) * (b - a)), e = a + Math.floor(((i + 1) / n) * (b - a));
+    for (let j = s; j <= e && j < b; j++) peak = Math.max(peak, m.peaks[j]);
+    const h = Math.max(1, Math.min(1, peak) * 48);
+    top += `${i},${(50 - h).toFixed(1)} `;
+    bottom = `${i},${(50 + h).toFixed(1)} ` + bottom;
+  }
+  // double quotes inside (percent-encoded below) so it can sit in url('...') within a style="" attribute
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n - 1} 100" preserveAspectRatio="none"><polygon points="${top}${bottom}" fill="${color}" fill-opacity=".75"/></svg>`;
+  const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  if (waveCache.size > 400) waveCache.clear();
+  waveCache.set(key, url);
+  return url;
 }
 
 // Greedy interval partitioning: each clip goes in the first lane that is free.

@@ -1,6 +1,6 @@
 // Backend for the Lao video editor (public/editor.html). Editing and rendering
 // happen entirely in the browser; the server only proxies requests to OpenAI
-// (Whisper subtitles, translation, voiceover) and Azure Speech (Lao voiceover)
+// (Whisper subtitles, text AI, voiceover) and Azure Speech (Lao voiceover)
 // so API keys never reach the client.
 const express = require('express');
 const { load, save } = require('../db');
@@ -15,12 +15,8 @@ router.use(requireAuth);
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGS = ['lo', 'th', 'en', 'vi', 'zh', 'ko', 'ja', 'fr'];
 
-const LANG_NAMES = {
-  lo: 'Lao', th: 'Thai', en: 'English', vi: 'Vietnamese',
-  zh: 'Simplified Chinese', ko: 'Korean', ja: 'Japanese', fr: 'French'
-};
+// chat model for the text features (assistant, script, proofreading, translation)
 const TRANSLATE_MODEL = () => process.env.OPENAI_TRANSLATE_MODEL || 'gpt-4o-mini';
-const MAX_TRANSLATE_LINES = 100;
 
 // A short Lao prompt nudges Whisper into Lao script; without it Lao audio is
 // sometimes transcribed in Thai script.
@@ -127,58 +123,31 @@ router.post('/transcribe',
   }
 );
 
-// Subtitle translation. Lines go as one JSON array so the model sees the
-// surrounding context, and must come back with the same count and order.
-router.post('/translate', async (req, res) => {
+// General text AI for the assistant, script writer, proofreading and post
+// captions. The prompts are built in the browser (the same ones go to Claude
+// when the page runs on claude.ai); this only adds the key.
+router.post('/ai', async (req, res) => {
   const key = apiKey();
   if (!key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ OpenAI API Key' });
-  const { lines, from, to } = req.body || {};
-  if (!Array.isArray(lines) || !lines.length || lines.length > MAX_TRANSLATE_LINES ||
-      !lines.every(l => typeof l === 'string' && l.length <= 1000)) {
-    return res.status(400).json({ error: 'ຂໍ້ມູນຊັບບໍ່ຖືກຕ້ອງ' });
-  }
-  if (!LANG_NAMES[to] || (from && !LANG_NAMES[from])) {
-    return res.status(400).json({ error: 'ບໍ່ຮອງຮັບພາສານີ້' });
-  }
-
-  let system = `You translate video subtitles${from ? ` from ${LANG_NAMES[from]}` : ''} into ${LANG_NAMES[to]}. ` +
-    'The user sends {"lines": [...]}. Reply with JSON {"lines": [...]} containing exactly the same number ' +
-    'of items in the same order, one translation per input line. Keep each line short and natural to read ' +
-    'as a subtitle, keep names as they are, and add no notes or explanations.';
-  if (to === 'lo') {
-    system += ' Write only in Lao script (never Thai script) using modern Lao spelling such as ໜ and ໝ.';
-  }
-
+  const prompt = typeof (req.body && req.body.prompt) === 'string' ? req.body.prompt : '';
+  if (!prompt.trim() || prompt.length > 60000) return res.status(400).json({ error: 'ຄຳຂໍບໍ່ຖືກຕ້ອງ' });
   try {
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: TRANSLATE_MODEL(),
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
+        temperature: 0.5,
         messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: JSON.stringify({ lines }) }
+          ...(req.body.json ? [{ role: 'system', content: 'Reply with only the requested JSON value, no prose and no code fences.' }] : []),
+          { role: 'user', content: prompt }
         ]
       }),
       signal: AbortSignal.timeout(2 * 60 * 1000)
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg = (data.error && data.error.message) || `HTTP ${r.status}`;
-      return res.status(502).json({ error: `OpenAI: ${msg}` });
-    }
-    let out;
-    try {
-      out = JSON.parse(data.choices[0].message.content).lines;
-    } catch (e) {
-      out = null;
-    }
-    if (!Array.isArray(out) || out.length !== lines.length) {
-      return res.status(502).json({ error: 'ຜົນການແປບໍ່ຄົບຖ້ວນ, ກະລຸນາລອງໃໝ່' });
-    }
-    res.json({ lines: out.map(l => String(l).trim()) });
+    if (!r.ok) return res.status(502).json({ error: `OpenAI: ${(data.error && data.error.message) || `HTTP ${r.status}`}` });
+    res.json({ text: (data.choices && data.choices[0] && data.choices[0].message.content) || '' });
   } catch (e) {
     res.status(502).json({ error: `ເຊື່ອມຕໍ່ OpenAI ບໍ່ໄດ້: ${e.message}` });
   }

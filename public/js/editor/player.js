@@ -1,7 +1,7 @@
 // Preview engine: one hidden <video>/<audio> element per media file, kept in
 // sync with the timeline clock and composited onto a canvas together with
 // text overlays and subtitles. The same canvas is recorded for export.
-import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay } from './store.js';
+import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay, clipDuration, trackFlag, DEFAULT_TF } from './store.js';
 import { wrapText, graphemes, toLaoDigits } from './lao.js';
 import { hexToRgba } from './util.js';
 import {
@@ -132,12 +132,20 @@ export class Player {
   sync() {
     const t = state.time;
     const active = new Set();
-    const play = (mediaId, el, srcTime, vol) => {
+    // fade in/out envelope of a clip at `local` seconds into it
+    const fade = (c, local, dur) => {
+      let g = 1;
+      if (c.fadeIn > 0) g = Math.min(g, local / c.fadeIn);
+      if (c.fadeOut > 0) g = Math.min(g, (dur - local) / c.fadeOut);
+      return Math.max(0, Math.min(1, g));
+    };
+    const play = (mediaId, el, srcTime, vol, rate = 1) => {
       active.add(mediaId);
       if (!(el instanceof HTMLMediaElement) || el.readyState === 0) return;
       this.setVolume(mediaId, el, vol);
+      if (el.playbackRate !== rate) el.playbackRate = rate;
       if (state.playing) {
-        if (Math.abs(el.currentTime - srcTime) > 0.3) el.currentTime = srcTime;
+        if (Math.abs(el.currentTime - srcTime) > 0.3 * Math.max(1, rate)) el.currentTime = srcTime;
         if (el.paused) el.play().catch(() => {});
       } else {
         if (!el.paused) el.pause();
@@ -148,12 +156,16 @@ export class Player {
     for (const l of videoLayout()) {
       if (t >= l.start && t < l.end) {
         const m = state.media.get(l.clip.mediaId);
-        if (m && m.type === 'video') play(m.id, this.element(m), l.clip.in + (t - l.start), l.clip.volume ?? 1);
+        if (m && m.type === 'video') {
+          const sp = l.clip.speed || 1, local = t - l.start;
+          const vol = trackFlag('video', 'mute') ? 0 : (l.clip.volume ?? 1) * fade(l.clip, local, l.end - l.start);
+          play(m.id, this.element(m), l.clip.in + local * sp, vol, sp);
+        }
         break;
       }
     }
     for (const c of state.project.tracks.audio) {
-      const d = c.out - c.in;
+      const d = clipDuration(c);
       // load upcoming clips early (voiceover lines are many short files)
       if (state.playing && c.start > t && c.start - t < 1.5) {
         const m = state.media.get(c.mediaId);
@@ -161,7 +173,9 @@ export class Player {
       }
       if (t >= c.start && t < c.start + d) {
         const m = state.media.get(c.mediaId);
-        if (m) play(m.id, this.element(m), c.in + (t - c.start), c.volume ?? 1);
+        const sp = c.speed || 1, local = t - c.start;
+        const vol = trackFlag('audio', 'mute') ? 0 : (c.volume ?? 1) * fade(c, local, d);
+        if (m) play(m.id, this.element(m), c.in + local * sp, vol, sp);
       }
     }
     for (const [id, el] of this.els) {
@@ -178,7 +192,7 @@ export class Player {
     this.hitBoxes = [];
 
     const { effects, stickers } = state.project.tracks;
-    const activeFx = effects.filter(c => t >= c.start && t < c.end);
+    const activeFx = trackFlag('effects', 'hidden') ? [] : effects.filter(c => t >= c.start && t < c.end);
 
     // one transform for the video layer: effects (shake, zoom...) + transition
     const tr = { scale: 1, tx: 0, ty: 0, rot: 0, flip: false };
@@ -198,10 +212,16 @@ export class Player {
       const lt = t - cur.start;
       if (tin && idx > 0 && lt < tin.dur / 2) ts = transitionState(tin.type, 1 - lt / (tin.dur / 2), 'in', W, H);
       else if (tout && cur.end - t < tout.dur / 2) ts = transitionState(tout.type, 1 - (cur.end - t) / (tout.dur / 2), 'out', W, H);
+      // clip in/out animation when no transition is running
+      const an = cur.clip.anim;
+      if (!ts && an) {
+        if (an.inType && an.inType !== 'none' && lt < an.inDur) ts = transitionState(an.inType, 1 - lt / an.inDur, 'in', W, H);
+        else if (an.outType && an.outType !== 'none' && cur.end - t < an.outDur) ts = transitionState(an.outType, 1 - (cur.end - t) / an.outDur, 'out', W, H);
+      }
       if (ts) { tr.scale *= ts.scale; tr.tx += ts.tx; tr.ty += ts.ty; tr.rot += ts.rot; }
 
       const m = state.media.get(cur.clip.mediaId);
-      if (m) {
+      if (m && !trackFlag('video', 'hidden')) {
         const el = this.element(m);
         const ready = m.type === 'image' ? el.complete && el.naturalWidth : el.readyState >= 2;
         if (ready) this.drawMedia(el, m, cur.clip, W, H, tr, ts);
@@ -218,21 +238,21 @@ export class Player {
 
     for (const e of activeFx) drawEffectOverlay(ctx, this.canvas, e.fx, t - e.start, e.end - e.start, e.amount ?? 1, W, H);
 
-    for (const c of stickers) {
+    for (const c of trackFlag('stickers', 'hidden') ? [] : stickers) {
       if (t >= c.start && t < c.end) {
         const box = this.drawSticker(c, t - c.start, W, H);
         if (box) this.hitBoxes.push({ track: 'stickers', id: c.id, box });
       }
     }
 
-    for (const c of state.project.tracks.text) {
+    for (const c of trackFlag('text', 'hidden') ? [] : state.project.tracks.text) {
       if (t >= c.start && t < c.end) {
         const box = this.drawText(c.text, c.style, t - c.start, c.end - c.start, W, H);
         if (box) this.hitBoxes.push({ track: 'text', id: c.id, box });
       }
     }
     const ss = state.project.subStyle;
-    for (const s of state.project.tracks.subs) {
+    for (const s of trackFlag('subs', 'hidden') ? [] : state.project.tracks.subs) {
       if (t >= s.start && t < s.end) {
         const text = ss.laoDigits ? toLaoDigits(subDisplay(s)) : subDisplay(s);
         const box = this.drawText(text, ss, t - s.start, s.end - s.start, W, H);
@@ -274,17 +294,19 @@ export class Player {
       if (ts.wipe > 0) ctx.rect(0, 0, W - w, H); else ctx.rect(w, 0, W - w, H);
       ctx.clip();
     }
-    ctx.translate(W / 2 + tr.tx, H / 2 + tr.ty);
-    ctx.rotate(tr.rot);
-    ctx.scale(tr.scale * (tr.flip ? -1 : 1), tr.scale);
-    ctx.translate(-W / 2, -H / 2);
     if ((clip.fit || 'contain') === 'contain' && clip.bg === 'blur' && 'filter' in ctx) {
       ctx.save();
       ctx.filter = `blur(${Math.round(W / 40)}px) brightness(0.7)`;
-      const dw = sw * cover * 1.1, dh = sh * cover * 1.1;
-      ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      const bw = sw * cover * 1.1, bh = sh * cover * 1.1;
+      ctx.drawImage(el, (W - bw) / 2, (H - bh) / 2, bw, bh);
       ctx.restore();
     }
+    const tf = { ...DEFAULT_TF, ...clip.tf };
+    ctx.translate(W / 2 + tr.tx + tf.x * W, H / 2 + tr.ty + tf.y * H);
+    ctx.rotate(tr.rot + tf.rot * Math.PI / 180);
+    ctx.scale(tr.scale * tf.scale * (tr.flip !== tf.flip ? -1 : 1), tr.scale * tf.scale);
+    ctx.translate(-W / 2, -H / 2);
+    ctx.globalAlpha = Math.max(0, Math.min(1, tf.opacity));
     const k = (clip.fit === 'cover') ? cover : contain;
     const dw = sw * k, dh = sh * k;
     let filter = look.filter;

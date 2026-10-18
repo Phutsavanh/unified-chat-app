@@ -1,7 +1,7 @@
 import {
   state, emit, subscribe, commit, checkpoint, undo, redo, ASPECTS, DEFAULT_TEXT_STYLE,
   videoLayout, totalDuration, selectedClip, findClip, clipDuration, sortTrack, newId, subDisplay,
-  persistMedia, deleteMedia, loadSaved, loadProject, resetProject
+  persistMedia, deleteMedia, loadSaved, loadProject, resetProject, DEFAULT_TF, DEFAULT_ANIM, trackFlag
 } from './store.js';
 import { Player } from './player.js';
 import { Timeline, escapeHtml } from './timeline.js';
@@ -9,6 +9,8 @@ import { mixTimelineAudio, transcribe, detectSpeech, alignScript, refineSegments
 import { exportVideo, supportedFormats } from './exporter.js';
 import { initVoiceover } from './voiceover.js';
 import { initLibrary } from './library/panels.js';
+import { aiBackend, AIUnavailable, writeScript, proofreadLines, translateLines, postCaption } from './ai.js';
+import { initAssistant } from './assistant.js';
 import { EFFECTS, FILTERS, TRANSITIONS } from './library/visual.js';
 import { LAO_FONTS, normalizeLao, toLaoDigits, toArabicDigits, splitAtFraction, hasThaiScript } from './lao.js';
 import { fmtTime, toSRT, toVTT, parseSubtitles, download, clamp } from './util.js';
@@ -136,6 +138,7 @@ async function importFiles(files) {
     if (m.broken) { toast(`ເບົາເຊີເປີດໄຟລ໌ນີ້ບໍ່ໄດ້: ${file.name}`, 'error'); continue; }
     state.media.set(m.id, m);
     persistMedia(m);
+    queuePeaks(m);
   }
   renderMedia();
 }
@@ -162,6 +165,7 @@ function discardMedia(m) {
 function adoptMedia(m) {
   state.media.set(m.id, m);
   persistMedia(m);
+  queuePeaks(m);
   if (!m.hidden) renderMedia();
 }
 
@@ -387,6 +391,33 @@ function fixTiming(track, c) {
   };
 }
 
+// CapCut-style tabs inside the properties panel
+let propsTab = 'video';
+const propsTabs = tabs => `<div class="ptabs">${tabs.map(([id, name]) => `<button data-ptab="${id}" class="${id === propsTab ? 'active' : ''}">${name}</button>`).join('')}</div>`;
+const audioFields = () => [
+  { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 },
+  { k: 'fadeIn', label: 'ຄ່ອຍໆດັງຂຶ້ນ (ວິ)', type: 'range', min: 0, max: 5, step: 0.1 },
+  { k: 'fadeOut', label: 'ຄ່ອຍໆເບົາລົງ (ວິ)', type: 'range', min: 0, max: 5, step: 0.1 }
+];
+const speedPanel = c => `<div class="props-info">ຄວາມຍາວ ${fmtTime(clipDuration(c))} (ຕົ້ນສະບັບ ${fmtTime(c.out - c.in)})</div>
+  <div class="speed-presets">${[0.25, 0.5, 1, 1.5, 2, 3, 4].map(v => `<button data-speed="${v}" class="${(c.speed || 1) === v ? 'active' : ''}">${v}x</button>`).join('')}</div>`;
+const ANIM_TYPES = [['none', 'ບໍ່ມີ'], ...TRANSITIONS.map(t => [t.id, t.name])];
+const animFields = () => [
+  { k: 'inType', label: 'ແອນິເມຊັນເຂົ້າ', type: 'select', options: ANIM_TYPES },
+  { k: 'inDur', label: 'ໄລຍະເວລາເຂົ້າ (ວິ)', type: 'range', min: 0.1, max: 3, step: 0.1 },
+  { k: 'outType', label: 'ແອນິເມຊັນອອກ', type: 'select', options: ANIM_TYPES },
+  { k: 'outDur', label: 'ໄລຍະເວລາອອກ (ວິ)', type: 'range', min: 0.1, max: 3, step: 0.1 }
+];
+
+$('#props').addEventListener('click', e => {
+  const tab = e.target.closest('[data-ptab]');
+  if (tab) { propsTab = tab.dataset.ptab; renderProps(); return; }
+  const sp = e.target.closest('[data-speed]');
+  const c = selectedClip();
+  if (sp && c) { commit(() => { c.speed = Number(sp.dataset.speed); }); return; }
+  if (e.target.closest('[data-reset-tf]') && c) commit(() => { c.tf = { ...DEFAULT_TF }; });
+});
+
 function renderProps() {
   const root = $('#props');
   const c = selectedClip();
@@ -398,26 +429,49 @@ function renderProps() {
     parts.push(`<div class="props-section"><h4>ຮູບແບບຊັບໄຕເຕິ້ນ (ທຸກແຖວ)</h4>`, form(styleFields(true), state.project.subStyle), `</div>`);
   } else if (sel.track === 'video') {
     const m = state.media.get(c.mediaId);
-    title = m && m.type === 'image' ? 'ຮູບພາບ' : 'ຄລິບວິດີໂອ';
-    const fields = [
-      ...(m && m.type === 'image' ? [{ k: 'out', label: 'ໄລຍະເວລາ (ວິນາທີ)', type: 'time' }] : []),
-      ...(m && m.type === 'video' ? [{ k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }] : []),
-      { k: 'fit', label: 'ການຈັດວາງ', type: 'select', options: [['contain', 'ພໍດີ (ເຫັນທັງໝົດ)'], ['cover', 'ເຕັມຈໍ (ຕັດຂອບ)']] },
-      { k: 'bg', label: 'ພື້ນຫຼັງ', type: 'select', options: [['blur', 'ມົວ (ແບບ CapCut)'], ['black', 'ສີດຳ']] }
-    ];
+    const isVideo = m && m.type === 'video';
+    title = isVideo ? 'ຄລິບວິດີໂອ' : 'ຮູບພາບ';
+    const tabs = [['video', isVideo ? 'ວິດີໂອ' : 'ຮູບ'], ...(isVideo ? [['audio', 'ສຽງ'], ['speed', 'ຄວາມໄວ']] : []), ['anim', 'ແອນິເມຊັນ']];
+    if (!tabs.some(t => t[0] === propsTab)) propsTab = 'video';
+    parts.push(propsTabs(tabs));
     const look = [
       c.filter && `ຟິວເຕີ: ${(FILTERS.find(f => f.id === c.filter.id) || {}).name}`,
       c.adj && Object.values(c.adj).some(Boolean) && 'ປັບແຕ່ງສີແລ້ວ',
       c.trans && `ທຣານຊິຊັນ: ${(TRANSITIONS.find(x => x.id === c.trans.type) || {}).name}`
     ].filter(Boolean).join(' · ');
-    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}${look ? `<br>${escapeHtml(look)}` : ''}</div>`,
-      form(fields, c, k => { if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0); }));
+    if (propsTab === 'video') {
+      if (!c.tf) c.tf = { ...DEFAULT_TF };
+      parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}${look ? `<br>${escapeHtml(look)}` : ''}</div>`,
+        form([
+          ...(isVideo ? [] : [{ k: 'out', label: 'ໄລຍະເວລາ (ວິນາທີ)', type: 'time' }]),
+          { k: 'fit', label: 'ການຈັດວາງ', type: 'select', options: [['contain', 'ພໍດີ (ເຫັນທັງໝົດ)'], ['cover', 'ເຕັມຈໍ (ຕັດຂອບ)']] },
+          { k: 'bg', label: 'ພື້ນຫຼັງ', type: 'select', options: [['blur', 'ມົວ (ແບບ CapCut)'], ['black', 'ສີດຳ']] }
+        ], c, k => { if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0); }),
+        `<div class="props-section"><h4>ການແປງ (Transform)</h4>`,
+        form([
+          { k: 'scale', label: 'ຂະໜາດ', type: 'range', min: 0.1, max: 3, step: 0.01 },
+          { k: 'x', label: 'ຕຳແໜ່ງ X', type: 'range', min: -1, max: 1, step: 0.01 },
+          { k: 'y', label: 'ຕຳແໜ່ງ Y', type: 'range', min: -1, max: 1, step: 0.01 },
+          { k: 'rot', label: 'ໝູນ (ອົງສາ)', type: 'range', min: -180, max: 180, step: 1 },
+          { k: 'opacity', label: 'ຄວາມທຶບ', type: 'range', min: 0, max: 1, step: 0.01 },
+          { k: 'flip', label: 'ສະທ້ອນຊ້າຍ-ຂວາ', type: 'check' }
+        ], c.tf),
+        `<button class="wide" data-reset-tf>ຄືນຄ່າ Transform</button></div>`);
+    } else if (propsTab === 'audio') {
+      parts.push(form(audioFields(), c));
+    } else if (propsTab === 'speed') {
+      parts.push(speedPanel(c), form([{ k: 'speed', label: 'ຄວາມໄວ (x)', type: 'range', min: 0.25, max: 4, step: 0.05 }], c));
+    } else {
+      if (!c.anim) c.anim = { ...DEFAULT_ANIM };
+      parts.push(form(animFields(), c.anim));
+    }
   } else if (sel.track === 'audio') {
     const m = state.media.get(c.mediaId);
     title = 'ສຽງ / ເພງ';
-    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}</div>`,
-      form([{ k: 'start', label: 'ເລີ່ມທີ່ (ວິນາທີ)', type: 'time' },
-        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }], c, fixTiming('audio', c)));
+    if (propsTab !== 'speed') propsTab = 'audio';
+    parts.push(propsTabs([['audio', 'ສຽງ'], ['speed', 'ຄວາມໄວ']]), `<div class="props-info">${escapeHtml(m ? m.name : '')}${m && m.credit ? `<br><small>${escapeHtml(m.credit)}</small>` : ''}</div>`);
+    if (propsTab === 'audio') parts.push(form([{ k: 'start', label: 'ເລີ່ມທີ່ (ວິນາທີ)', type: 'time' }, ...audioFields()], c, fixTiming('audio', c)));
+    else parts.push(speedPanel(c), form([{ k: 'speed', label: 'ຄວາມໄວ (x)', type: 'range', min: 0.25, max: 4, step: 0.05 }], c));
   } else if (sel.track === 'text') {
     title = 'ຂໍ້ຄວາມ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
@@ -498,7 +552,7 @@ function splitTrack(tracks, track, id, t) {
     const idx = videoLayout().findIndex(x => (!id || x.clip.id === id) && t > x.start + MIN && t < x.end - MIN);
     if (idx < 0) return false;
     const c = tracks.video[idx];
-    const cut = c.in + (t - videoLayout()[idx].start);
+    const cut = c.in + (t - videoLayout()[idx].start) * (c.speed || 1);
     tracks.video.splice(idx + 1, 0, { ...c, id: newId(), in: cut });
     c.out = cut;
     return true;
@@ -509,7 +563,7 @@ function splitTrack(tracks, track, id, t) {
   const end = track === 'audio' ? c.start + clipDuration(c) : c.end;
   if (t <= c.start + MIN || t >= end - MIN) return false;
   if (track === 'audio') {
-    const cut = c.in + (t - c.start);
+    const cut = c.in + (t - c.start) * (c.speed || 1);
     list.push({ ...c, id: newId(), start: t, in: cut });
     c.out = cut;
   } else {
@@ -527,6 +581,103 @@ function splitTrack(tracks, track, id, t) {
   }
   list.sort((x, y) => x.start - y.start);
   return true;
+}
+
+// Q / W in CapCut: delete the part of a clip left / right of the playhead.
+function trimToPlayhead(side) {
+  const t = state.time;
+  const MIN = 0.05;
+  const sel = state.selection;
+  const track = sel ? sel.track : 'video';
+  let target = null;
+  if (track === 'video') {
+    target = videoLayout().find(l => (!sel || l.clip.id === sel.id) && t > l.start + MIN && t < l.end - MIN);
+  } else {
+    const c = selectedClip();
+    const end = c && (track === 'audio' ? c.start + clipDuration(c) : c.end);
+    if (c && t > c.start + MIN && t < end - MIN) target = { clip: c, start: c.start };
+  }
+  if (!target) return toast('ວາງເສັ້ນເວລາໄວ້ເທິງຄລິບກ່ອນ', 'warn');
+  const c = target.clip;
+  const local = t - target.start;
+  const sp = c.speed || 1;
+  commit(() => {
+    if (track === 'video' || track === 'audio') {
+      if (side === 'left') { c.in += local * sp; if (track === 'audio') c.start = t; }
+      else c.out = c.in + local * sp;
+    } else if (side === 'left') c.start = t;
+    else c.end = t;
+  });
+  if (side === 'left' && track === 'video') player.seek(target.start);
+}
+
+// Freeze frame: grab the current frame of the main clip and hold it for 3 s.
+async function freezeFrame() {
+  const t = state.time;
+  const l = videoLayout().find(x => t >= x.start && t < x.end);
+  const m = l && state.media.get(l.clip.mediaId);
+  if (!m || m.type !== 'video') return toast('ວາງເສັ້ນເວລາໄວ້ເທິງຄລິບວິດີໂອກ່ອນ', 'warn');
+  const el = player.element(m);
+  if (el.readyState < 2) return toast('ລໍຖ້າວິດີໂອໂຫຼດກ່ອນ', 'warn');
+  const c = document.createElement('canvas');
+  c.width = el.videoWidth; c.height = el.videoHeight;
+  c.getContext('2d').drawImage(el, 0, 0);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const img = await createMedia(blob, `ເຟຣມຄ້າງ ${fmtTime(t)}`, { type: 'image' });
+  adoptMedia(img);
+  const tracks = JSON.parse(JSON.stringify(state.project.tracks));
+  const split = splitTrack(tracks, 'video', l.clip.id, t);
+  const idx = tracks.video.findIndex(x => x.id === l.clip.id) + (split ? 1 : 0);
+  tracks.video.splice(idx, 0, { id: newId(), mediaId: img.id, in: 0, out: 3, volume: 1, fit: l.clip.fit, bg: l.clip.bg, filter: l.clip.filter, adj: l.clip.adj });
+  commit(p => { p.tracks = tracks; });
+  toast('ເພີ່ມເຟຣມຄ້າງ 3 ວິ ແລ້ວ ✓', 'ok');
+}
+
+function videoTarget() {
+  const c = selectedClip();
+  if (c && state.selection.track === 'video') return c;
+  const l = videoLayout().find(x => state.time >= x.start && state.time < x.end);
+  return l ? l.clip : null;
+}
+function transformClip(fn) {
+  const c = videoTarget();
+  if (!c) return toast('ເລືອກຄລິບວິດີໂອກ່ອນ', 'warn');
+  commit(() => { c.tf = { ...DEFAULT_TF, ...c.tf }; fn(c.tf); });
+}
+
+// Waveforms: one peak per 1/50 s, decoded at a low sample rate to save memory.
+const peakQueue = [];
+let peakBusy = false;
+function queuePeaks(m) {
+  if (m.type === 'image' || m.peaks || m.blob.size > 300 * 1024 * 1024) return;
+  peakQueue.push(m);
+  runPeaks();
+}
+async function runPeaks() {
+  if (peakBusy) return;
+  peakBusy = true;
+  while (peakQueue.length) {
+    const m = peakQueue.shift();
+    try {
+      const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await m.blob.arrayBuffer());
+      const d = buf.getChannelData(0);
+      const step = buf.sampleRate / 50;
+      const peaks = new Float32Array(Math.ceil(d.length / step));
+      let max = 0;
+      for (let i = 0; i < peaks.length; i++) {
+        let p = 0;
+        for (let j = Math.floor(i * step), e = Math.min(d.length, (i + 1) * step); j < e; j += 2) p = Math.max(p, Math.abs(d[j]));
+        peaks[i] = p;
+        max = Math.max(max, p);
+      }
+      if (max > 0) for (let i = 0; i < peaks.length; i++) peaks[i] /= max;
+      m.peaks = peaks;
+      emit('drag');
+    } catch (e) {
+      m.peaks = null; // no audio track, or a codec the browser can't decode
+    }
+  }
+  peakBusy = false;
 }
 
 function deleteSelected() {
@@ -573,7 +724,7 @@ function addSubtitleAtPlayhead() {
 // ---------------------------------------------------------------- auto subtitles
 let aiReady = false;
 let offline = false;
-const OFFLINE_MSG = 'ຟັງຊັນ AI ຕ້ອງໃຊ້ກັບເຊີບເວີ LaoCut (ເບິ່ງວິທີຕິດຕັ້ງໃນ README)';
+const OFFLINE_MSG = 'ການຖອດສຽງ ແລະ ສຽງພາກ ຕ້ອງໃຊ້ເຊີບເວີ LaoCut + API Key (ເບິ່ງ README). ເຄື່ອງມືຂໍ້ຄວາມ AI ແລະ ຜູ້ຊ່ວຍ AI ໃຊ້ໄດ້ຢູ່ນີ້';
 let aiStatus = {};
 
 async function refreshStatus() {
@@ -583,6 +734,7 @@ async function refreshStatus() {
     const s = await r.json();
     aiStatus = s;
     aiReady = s.whisper;
+    renderAITextStatus();
     voiceover.renderStatus();
     $('#azureKeyInput').value = s.azureKey || '';
     $('#azureKeyInput').disabled = s.azureFromEnv;
@@ -601,6 +753,7 @@ async function refreshStatus() {
     $('#aiStatus').innerHTML = msg;
     $('#ttsStatus').innerHTML = msg;
     offline = true;
+    renderAITextStatus();
     $('#inboxLink').hidden = true;
     $('#settingsBtn').hidden = true;
   }
@@ -665,9 +818,92 @@ $('#alignBtn').addEventListener('click', async () => {
 
 const TRANSLATE_BATCH = 60;
 
+// Text AI: the server's OpenAI key, or Claude when the page runs on claude.ai.
+const aiStatusOrNull = () => (offline ? null : aiStatus);
+async function needTextAI() {
+  if (await aiBackend(aiStatusOrNull())) return true;
+  if (offline) toast('AI ໃຊ້ບໍ່ໄດ້ໃນໜ້ານີ້ — ເປີດລິ້ງໃນ claude.ai ຫຼື ໃຊ້ກັບເຊີບເວີ', 'warn');
+  else openModal('settingsModal');
+  return false;
+}
+async function renderAITextStatus() {
+  const b = await aiBackend(aiStatusOrNull());
+  $('#aiTextStatus').innerHTML = b === 'server' ? '<span class="dot ok"></span> ໃຊ້ OpenAI ຜ່ານເຊີບເວີ'
+    : b === 'claude' ? '<span class="dot ok"></span> ໃຊ້ Claude (ຈາກບັນຊີ claude.ai ຂອງທ່ານ)'
+      : '<span class="dot"></span> ຍັງບໍ່ມີ AI — ຕັ້ງ OpenAI Key ຫຼື ເປີດໃນ claude.ai';
+}
+
+$('#writeScriptBtn').addEventListener('click', async () => {
+  const topic = $('#scriptTopic').value.trim();
+  if (!topic) return toast('ພິມຫົວຂໍ້ວິດີໂອກ່ອນ', 'warn');
+  if (!(await needTextAI())) return;
+  busy('AI ກຳລັງຂຽນບົດ...', 0.3);
+  try {
+    const text = await writeScript({ topic, seconds: Number($('#scriptLen').value), tone: $('#scriptTone').value }, { status: aiStatusOrNull() });
+    const clean = normalizeLao(text.replace(/^["'\s]+|["'\s]+$/g, '')).replace(/ ?\n ?/g, '\n');
+    $('#scriptInput').value = clean;
+    $('#ttsText').value = clean.replace(/\n/g, ' ');
+    toast('ຂຽນບົດແລ້ວ — ກົດ "ຈັດເວລາຕາມສຽງເວົ້າ" ຫຼື ໄປແຖບສຽງພາກ', 'ok');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    busy(false);
+  }
+});
+
+$('#proofreadBtn').addEventListener('click', async () => {
+  const subs = state.project.tracks.subs;
+  if (!subs.length) return toast('ຍັງບໍ່ມີຊັບ', 'warn');
+  if (!(await needTextAI())) return;
+  const ids = subs.map(s => s.id);
+  try {
+    const out = [];
+    for (let i = 0; i < subs.length; i += TRANSLATE_BATCH) {
+      busy(`AI ກຳລັງກວດຄຳຜິດ ${i + 1}–${Math.min(i + TRANSLATE_BATCH, subs.length)} / ${subs.length}...`, i / subs.length);
+      out.push(...await proofreadLines(subs.slice(i, i + TRANSLATE_BATCH).map(s => s.text), { status: aiStatusOrNull() }));
+    }
+    let changed = 0;
+    commit(p => {
+      for (const s of p.tracks.subs) {
+        const i = ids.indexOf(s.id);
+        if (i < 0 || !out[i]) continue;
+        const fixed = normalizeLao(out[i]);
+        if (fixed !== s.text) { s.text = fixed; changed++; }
+      }
+    });
+    toast(`ກວດແລ້ວ — ແກ້ ${changed} ແຖວ (Ctrl+Z ເພື່ອຍົກເລີກ)`, 'ok');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    busy(false);
+  }
+});
+
+async function makePost() {
+  if (!(await needTextAI())) return;
+  $('#postText').value = 'AI ກຳລັງຂຽນ...';
+  openModal('postModal');
+  try {
+    const p = await postCaption({
+      transcript: state.project.tracks.subs.map(s => s.text).join(' ') || state.project.tracks.text.map(t => t.text).join(' '),
+      title: state.project.name,
+      platform: $('#postPlatform').value
+    }, { status: aiStatusOrNull() });
+    const tags = Array.isArray(p.hashtags) ? p.hashtags.join(' ') : '';
+    $('#postText').value = [p.title, '', p.caption, '', tags].filter(x => x !== undefined).join('\n').trim();
+  } catch (e) {
+    $('#postText').value = e.message;
+  }
+}
+$('#postBtn').addEventListener('click', makePost);
+$('#postRegenBtn').addEventListener('click', makePost);
+$('#postCopyBtn').addEventListener('click', () => {
+  $('#postText').select();
+  navigator.clipboard?.writeText($('#postText').value).then(() => toast('ກັອບແລ້ວ', 'ok'), () => {});
+});
+
 $('#translateBtn').addEventListener('click', async () => {
-  if (offline) { toast(OFFLINE_MSG, 'warn'); return; }
-  if (!aiReady) { openModal('settingsModal'); return; }
+  if (!(await needTextAI())) return;
   const subs = state.project.tracks.subs;
   if (!subs.length) { toast('ຍັງບໍ່ມີຊັບ', 'warn'); return; }
   const from = $('#subLang').value;
@@ -680,14 +916,7 @@ $('#translateBtn').addEventListener('click', async () => {
     const out = [];
     for (let i = 0; i < lines.length; i += TRANSLATE_BATCH) {
       busy(`ກຳລັງແປ ${i + 1}–${Math.min(i + TRANSLATE_BATCH, lines.length)} / ${lines.length}...`, i / lines.length);
-      const r = await fetch('/api/editor/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, lines: lines.slice(i, i + TRANSLATE_BATCH) })
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-      out.push(...data.lines);
+      out.push(...await translateLines(lines.slice(i, i + TRANSLATE_BATCH), from, to, { status: aiStatusOrNull() }));
     }
     busy(false);
     commit(p => {
@@ -922,6 +1151,13 @@ $('#prevFrame').addEventListener('click', () => player.seek(state.time - 1 / 30)
 $('#nextFrame').addEventListener('click', () => player.seek(state.time + 1 / 30));
 $('#fullscreenBtn').addEventListener('click', () => $('#stage').requestFullscreen && $('#stage').requestFullscreen());
 $('#splitBtn').addEventListener('click', splitAtPlayhead);
+$('#trimLBtn').addEventListener('click', () => trimToPlayhead('left'));
+$('#trimRBtn').addEventListener('click', () => trimToPlayhead('right'));
+$('#freezeBtn').addEventListener('click', () => freezeFrame().catch(e => toast(e.message, 'error')));
+$('#flipBtn').addEventListener('click', () => transformClip(tf => { tf.flip = !tf.flip; }));
+$('#rotateBtn').addEventListener('click', () => transformClip(tf => { tf.rot = ((tf.rot + 90 + 180) % 360) - 180; }));
+$('#zoomOutBtn').addEventListener('click', () => { state.zoom = clamp(state.zoom / 1.3, 4, 400); emit('zoom'); });
+$('#zoomInBtn').addEventListener('click', () => { state.zoom = clamp(state.zoom * 1.3, 4, 400); emit('zoom'); });
 $('#deleteBtn').addEventListener('click', deleteSelected);
 $('#dupBtn').addEventListener('click', duplicateSelected);
 $('#addSubBtn').addEventListener('click', addSubtitleAtPlayhead);
@@ -936,6 +1172,7 @@ function openTab(tab) {
 }
 $$('.tabs button').forEach(b => b.addEventListener('click', () => openTab(b.dataset.tab)));
 timeline.onTransitionClick = () => openTab('transitions');
+initAssistant({ $, toast, textPresets: TEXT_PRESETS, addLibraryAudio: library.addLibraryAudio, getStatus: aiStatusOrNull });
 
 document.addEventListener('keydown', e => {
   if (e.target.closest('input, textarea, select, [contenteditable]')) return;
@@ -950,6 +1187,8 @@ document.addEventListener('keydown', e => {
   else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
   else if (mod && e.key.toLowerCase() === 'b' || (!mod && e.key.toLowerCase() === 's')) { e.preventDefault(); splitAtPlayhead(); }
   else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); }
+  else if (!mod && e.key.toLowerCase() === 'q') trimToPlayhead('left');
+  else if (!mod && e.key.toLowerCase() === 'w') trimToPlayhead('right');
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
   else if (e.key === 'ArrowLeft') player.seek(state.time - (e.shiftKey ? 1 : 1 / 30));
   else if (e.key === 'ArrowRight') player.seek(state.time + (e.shiftKey ? 1 : 1 / 30));
@@ -979,6 +1218,10 @@ function renderTransport() {
 subscribe(kind => {
   if (kind === 'time') { timeline.renderPlayhead(); renderTransport(); highlightActiveSub(); return; }
   if (kind === 'play') { renderTransport(); return; }
+  if (kind === 'saved') {
+    $('#savedAt').textContent = `ບັນທຶກອັດຕະໂນມັດ ${state.savedAt.toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit' })}`;
+    return;
+  }
   if (kind === 'zoom') { $('#zoomRange').value = state.zoom; timeline.render(); return; }
   if (kind === 'drag' || kind === 'edit') { timeline.render(); renderTransport(); return; }
   timeline.render();
@@ -1024,4 +1267,5 @@ subscribe(kind => {
   renderMedia();
   emit('project');
   refreshStatus();
+  for (const m of state.media.values()) queuePeaks(m);
 })();

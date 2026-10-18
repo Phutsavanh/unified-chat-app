@@ -45,6 +45,15 @@
     <symbol id="i-filter" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><circle cx="15" cy="9" r="6"/><circle cx="12" cy="15" r="6"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-freeze" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 9v6M14 9v6"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M12 3v18M8 7 3 12l5 5V7zM16 7l5 5-5 5V7z"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+    <symbol id="i-trimL" viewBox="0 0 24 24"><path d="M9 4v16M13 8l4 4-4 4M4 8v8"/></symbol>
+    <symbol id="i-trimR" viewBox="0 0 24 24"><path d="M15 4v16M11 8l-4 4 4 4M20 8v8"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   </defs>
 </svg>
@@ -55,6 +64,7 @@
       <span class="brand-name">LaoCut <small>ລາວຄັດ</small></span>
     </div>
     <input id="projectName" class="project-name" title="ຊື່ໂປຣເຈັກ">
+    <span id="savedAt" class="saved-at"></span>
     <select id="aspectSelect" title="ອັດຕາສ່ວນຈໍ">
       <option value="16:9">16:9 YouTube</option>
       <option value="9:16">9:16 TikTok / Reels</option>
@@ -74,6 +84,7 @@
 
   <nav class="menubar tabs" aria-label="ເຄື່ອງມື">
     <button data-tab="media" class="active"><svg class="i"><use href="#i-film"/></svg><span>ສື່</span></button>
+    <button data-tab="ai" class="ai-tab"><svg class="i"><use href="#i-sparkles"/></svg><span>ຜູ້ຊ່ວຍ AI</span></button>
     <button data-tab="audio"><svg class="i"><use href="#i-music"/></svg><span>ສຽງ</span></button>
     <button data-tab="text"><svg class="i"><use href="#i-type"/></svg><span>ຂໍ້ຄວາມ</span></button>
     <button data-tab="stickers"><svg class="i"><use href="#i-smile"/></svg><span>ສະຕິກເກີ</span></button>
@@ -96,6 +107,24 @@
       </div>
       <div id="mediaList" class="media-grid"></div>
       <p class="hint">ກົດ <b>+</b> ຫຼື ລາກໄຟລ໌ລົງ timeline. ໄຟລ໌ຢູ່ໃນເຄື່ອງຂອງທ່ານເທົ່ານັ້ນ, ບໍ່ໄດ້ອັບໂຫຼດ.</p>
+    </section>
+
+    <section class="tab-panel ai-panel" id="tab-ai" hidden>
+      <h3 class="panel-title">ຜູ້ຊ່ວຍຕັດຕໍ່ AI</h3>
+      <p class="hint">ບອກເປັນພາສາລາວວ່າຢາກໃຫ້ວິດີໂອເປັນແນວໃດ — AI ຈະໃສ່ຂໍ້ຄວາມ, ເພງ, ເອັບເຟັກ, ຟິວເຕີ ແລະ ທຣານຊິຊັນໃຫ້.</p>
+      <div id="aiSuggest" class="chips">
+        <button class="chip">ເຮັດໃຫ້ເປັນວິດີໂອ TikTok ມ່ວນໆ</button>
+        <button class="chip">ໃສ່ເພງ lofi ແລະ ຟິວເຕີອົບອຸ່ນ</button>
+        <button class="chip">ເພີ່ມຫົວຂໍ້ເປີດວິດີໂອ ແລະ ປ້າຍກົດຕິດຕາມຕອນທ້າຍ</button>
+        <button class="chip">ໃສ່ທຣານຊິຊັນທຸກຈຸດຕໍ່</button>
+        <button class="chip">ປັບສີໃຫ້ສົດໃສແບບຮູບເງົາ</button>
+      </div>
+      <div id="aiChat" class="chat"></div>
+      <form id="aiForm" class="chat-form">
+        <textarea id="aiInput" rows="2" lang="lo" placeholder="ເຊັ່ນ: ໃສ່ຂໍ້ຄວາມ 'ຂາຍດີ' ສີເຫຼືອງ ແລະ ສຽງ ding ຕອນວິນາທີທີ 2"></textarea>
+        <button id="aiSend" class="primary" aria-label="ສົ່ງ"><svg class="i"><use href="#i-right"/></svg></button>
+        <button id="aiStop" type="button" hidden>ຢຸດ</button>
+      </form>
     </section>
 
     <section class="tab-panel" id="tab-audio" hidden>
@@ -220,6 +249,24 @@
         <label class="check"><input type="checkbox" id="subModernHo"> ຂຽນ ໜ/ໝ ແທນ ຫນ/ຫມ</label>
         <button id="autoSubBtn" class="primary wide"><svg class="i"><use href="#i-sparkles"/></svg><span>ສ້າງຊັບອັດຕະໂນມັດ</span></button>
         <p class="hint">ສຽງຈາກ timeline ຈະຖືກສົ່ງໄປຖອດຄວາມ, ແລ້ວແບ່ງແຖວຕາມຄຳລາວໃຫ້ອ່ານງ່າຍ. ຄວາມຍາວແຖວປັບໄດ້ທີ່ "ຮູບແບບຊັບ".</p>
+      </div>
+
+      <div class="card">
+        <h4><svg class="i"><use href="#i-wand"/></svg>ເຄື່ອງມືຂໍ້ຄວາມ AI</h4>
+        <div id="aiTextStatus" class="status">...</div>
+        <label>ຫົວຂໍ້ວິດີໂອ (ໃຫ້ AI ຂຽນບົດ)
+          <input id="scriptTopic" lang="lo" placeholder="ເຊັ່ນ: ແນະນຳຮ້ານເຝີໃນວຽງຈັນ">
+        </label>
+        <div class="row">
+          <select id="scriptLen" aria-label="ຄວາມຍາວ"><option value="15">15 ວິ</option><option value="30" selected>30 ວິ</option><option value="60">60 ວິ</option></select>
+          <select id="scriptTone" aria-label="ໂທນ"><option value="friendly and fun">ມ່ວນ ເປັນກັນເອງ</option><option value="professional">ມືອາຊີບ</option><option value="exciting sales pitch">ຂາຍຂອງ ຕື່ນເຕັ້ນ</option><option value="calm storytelling">ເລົ່າເລື່ອງ ສະຫງົບ</option></select>
+        </div>
+        <button id="writeScriptBtn" class="wide"><svg class="i"><use href="#i-type"/></svg><span>ຂຽນບົດເວົ້າດ້ວຍ AI</span></button>
+        <div class="row">
+          <button id="proofreadBtn"><svg class="i"><use href="#i-cc"/></svg><span>ກວດຄຳຜິດຊັບ</span></button>
+          <button id="postBtn"><svg class="i"><use href="#i-sparkles"/></svg><span>ສ້າງແຄັບຊັນໂພສ</span></button>
+        </div>
+        <p class="hint">ບົດທີ່ຂຽນແລ້ວຈະໄປຢູ່ໃນ "ຈັດເວລາຊັບຈາກບົດ" ລຸ່ມນີ້ ແລະ ໃນແຖບສຽງພາກ.</p>
       </div>
 
       <div class="card">
@@ -370,11 +417,20 @@
       <button id="splitBtn" class="tool" title="ຕັດ (S / Ctrl+B)"><svg class="i"><use href="#i-cut"/></svg><span>ຕັດ</span></button>
       <button id="deleteBtn" class="tool" title="ລຶບ (Delete)"><svg class="i"><use href="#i-trash"/></svg><span>ລຶບ</span></button>
       <button id="dupBtn" class="tool" title="ສຳເນົາ (Ctrl+D)"><svg class="i"><use href="#i-copy"/></svg><span>ສຳເນົາ</span></button>
+      <button id="trimLBtn" class="tool" title="ລຶບສ່ວນຊ້າຍຂອງເສັ້ນເວລາ (Q)"><svg class="i"><use href="#i-trimL"/></svg><span>ລຶບຊ້າຍ</span></button>
+      <button id="trimRBtn" class="tool" title="ລຶບສ່ວນຂວາຂອງເສັ້ນເວລາ (W)"><svg class="i"><use href="#i-trimR"/></svg><span>ລຶບຂວາ</span></button>
+      <button id="freezeBtn" class="tool" title="ເຟຣມຄ້າງ 3 ວິ"><svg class="i"><use href="#i-freeze"/></svg><span>ຄ້າງພາບ</span></button>
+      <button id="flipBtn" class="tool icon-only" title="ສະທ້ອນ" aria-label="ສະທ້ອນ"><svg class="i"><use href="#i-flip"/></svg></button>
+      <button id="rotateBtn" class="tool icon-only" title="ໝູນ 90°" aria-label="ໝູນ 90°"><svg class="i"><use href="#i-rotate"/></svg></button>
       <span class="tool-sep"></span>
       <button id="addSubBtn" class="tool" title="ເພີ່ມຊັບທີ່ເສັ້ນເວລາ (T)"><svg class="i"><use href="#i-cc"/></svg><span>ເພີ່ມຊັບ</span></button>
       <div class="spacer"></div>
-      <span class="keys"><kbd>Space</kbd> ຫຼິ້ນ <kbd>S</kbd> ຕັດ <kbd>T</kbd> ເພີ່ມຊັບ <kbd>Ctrl</kbd>+ລໍ້ເມົ້າ ຊູມ</span>
-      <label class="zoom" title="ຊູມ timeline"><svg class="i"><use href="#i-zoom"/></svg><input id="zoomRange" type="range" min="4" max="400" value="60" aria-label="ຊູມ timeline"></label>
+      <span class="keys"><kbd>Space</kbd> ຫຼິ້ນ <kbd>S</kbd> ຕັດ <kbd>Q</kbd><kbd>W</kbd> ລຶບຊ້າຍ/ຂວາ</span>
+      <div class="zoom">
+        <button id="zoomOutBtn" class="tool icon-only" aria-label="ຊູມອອກ"><svg class="i"><use href="#i-minus"/></svg></button>
+        <input id="zoomRange" type="range" min="4" max="400" value="60" aria-label="ຊູມ timeline">
+        <button id="zoomInBtn" class="tool icon-only" aria-label="ຊູມເຂົ້າ"><svg class="i"><use href="#i-plus"/></svg></button>
+      </div>
     </div>
     <div id="timeline" class="timeline"></div>
   </footer>
@@ -430,6 +486,21 @@
     <div class="modal-actions">
       <button id="cancelExportBtn">ຍົກເລີກ</button>
       <button id="startExportBtn" class="primary">ເລີ່ມສົ່ງອອກ</button>
+    </div>
+  </div>
+</div>
+
+<div id="postModal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>ແຄັບຊັນສຳລັບໂພສ</h3>
+    <label>ແພລດຟອມ
+      <select id="postPlatform"><option>TikTok</option><option>Facebook</option><option>YouTube Shorts</option><option>Instagram Reels</option></select>
+    </label>
+    <textarea id="postText" rows="9" lang="lo"></textarea>
+    <div class="modal-actions">
+      <button data-close>ປິດ</button>
+      <button id="postRegenBtn">ຂຽນໃໝ່</button>
+      <button id="postCopyBtn" class="primary">ກັອບ</button>
     </div>
   </div>
 </div>

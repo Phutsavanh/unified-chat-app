@@ -61,7 +61,7 @@ export function initLibrary({ $, $$, toast, busy, createMedia, adoptMedia, selec
     toast(`ເພີ່ມ "${m.name}" ທີ່ ${fmtTime(state.time)} ແລ້ວ ✓`, 'ok');
   }
 
-  async function addBuiltIn(kind, item) {
+  async function ensureBuiltIn(kind, item) {
     let m = [...state.media.values()].find(x => x.libId === `${kind}:${item.id}`);
     if (!m) {
       busy(kind === 'music' ? 'ກຳລັງສ້າງເພງ...' : 'ກຳລັງສ້າງສຽງ...', 0.5);
@@ -73,7 +73,11 @@ export function initLibrary({ $, $$, toast, busy, createMedia, adoptMedia, selec
         busy(false);
       }
     }
-    addAudioMedia(m, kind);
+    return m;
+  }
+
+  async function addBuiltIn(kind, item) {
+    addAudioMedia(await ensureBuiltIn(kind, item), kind);
   }
 
   function libRow(kind, item, meta) {
@@ -407,6 +411,7 @@ export function initLibrary({ $, $$, toast, busy, createMedia, adoptMedia, selec
       if (!tab || tab === 'filters') renderFilters();
       if (!tab || tab === 'adjust') renderAdjust();
     },
-    stopPreview
+    stopPreview,
+    addLibraryAudio: (kind, id) => ensureBuiltIn(kind, (kind === 'music' ? MUSIC : SFX).find(x => x.id === id))
   };
 }
