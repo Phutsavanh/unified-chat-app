@@ -31,6 +31,23 @@ function toast(msg, kind = 'info') {
   setTimeout(() => el.remove(), 4000);
 }
 
+// In-page confirmation (window.confirm is blocked inside some embeds).
+function ask(message, yes = 'ຕົກລົງ') {
+  return new Promise(resolve => {
+    $('#confirmMsg').textContent = message;
+    $('#confirmYes').textContent = yes;
+    $('#confirmModal').hidden = false;
+    const done = v => {
+      $('#confirmModal').hidden = true;
+      $('#confirmYes').onclick = $('#confirmNo').onclick = null;
+      resolve(v);
+    };
+    $('#confirmYes').onclick = () => done(true);
+    $('#confirmNo').onclick = () => done(false);
+    $('#confirmYes').focus();
+  });
+}
+
 function busy(msg, frac) {
   const o = $('#busy');
   if (msg === false) { o.hidden = true; return; }
@@ -177,7 +194,7 @@ function closestAspect(r) {
 
 async function removeMedia(id) {
   const used = [...state.project.tracks.video, ...state.project.tracks.audio].some(c => c.mediaId === id);
-  if (used && !confirm('ໄຟລ໌ນີ້ຖືກໃຊ້ຢູ່ໃນ timeline. ລຶບອອກທັງໝົດບໍ?')) return;
+  if (used && !(await ask('ໄຟລ໌ນີ້ຖືກໃຊ້ຢູ່ໃນ timeline. ລຶບອອກທັງໝົດບໍ?', 'ລຶບ'))) return;
   commit(p => {
     p.tracks.video = p.tracks.video.filter(c => c.mediaId !== id);
     p.tracks.audio = p.tracks.audio.filter(c => c.mediaId !== id);
@@ -196,10 +213,10 @@ function renderMedia() {
   list.innerHTML = items.length ? items.map(m => `
     <div class="media-item" draggable="true" data-id="${m.id}" title="${escapeHtml(m.name)}">
       <div class="media-thumb" style="${m.thumb ? `background-image:url(${m.thumb})` : ''}">
-        ${m.type === 'audio' ? '<span class="media-ico">♪</span>' : ''}
+        ${m.type === 'audio' ? '<span class="media-ico"><svg class="i"><use href="#i-music"/></svg></span>' : ''}
         <span class="media-dur">${m.type === 'image' ? 'ຮູບ' : fmtTime(m.duration, 0)}</span>
-        <button class="media-add" data-act="add" title="ເພີ່ມໃສ່ timeline">+</button>
-        <button class="media-del" data-act="del" title="ລຶບ">×</button>
+        <button class="media-add" data-act="add" title="ເພີ່ມໃສ່ timeline" aria-label="ເພີ່ມໃສ່ timeline"><svg class="i"><use href="#i-plus"/></svg></button>
+        <button class="media-del" data-act="del" title="ລຶບ" aria-label="ລຶບ"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <div class="media-name">${escapeHtml(m.name)}</div>
     </div>`).join('')
@@ -209,7 +226,8 @@ function renderMedia() {
 $('#mediaList').addEventListener('click', e => {
   const item = e.target.closest('.media-item');
   if (!item) return;
-  const act = e.target.dataset.act;
+  // the click can land on the icon inside the button
+  const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'add') addMediaToTimeline(item.dataset.id);
   if (act === 'del') removeMedia(item.dataset.id);
 });
@@ -222,6 +240,7 @@ $('#mediaList').addEventListener('dragstart', e => {
   if (item) e.dataTransfer.setData('text/x-media-id', item.dataset.id);
 });
 $('#importBtn').addEventListener('click', () => $('#fileInput').click());
+$('#welcomeImportBtn').addEventListener('click', () => $('#fileInput').click());
 $('#fileInput').addEventListener('change', e => { importFiles([...e.target.files]); e.target.value = ''; });
 
 // drop files anywhere on the page
@@ -522,6 +541,8 @@ function addSubtitleAtPlayhead() {
 
 // ---------------------------------------------------------------- auto subtitles
 let aiReady = false;
+let offline = false;
+const OFFLINE_MSG = 'ຟັງຊັນ AI ຕ້ອງໃຊ້ກັບເຊີບເວີ LaoCut (ເບິ່ງວິທີຕິດຕັ້ງໃນ README)';
 let aiStatus = {};
 
 async function refreshStatus() {
@@ -548,6 +569,9 @@ async function refreshStatus() {
     const msg = '<span class="dot"></span> ບໍ່ໄດ້ເຊື່ອມຕໍ່ເຊີບເວີ — ຟັງຊັນ AI ໃຊ້ບໍ່ໄດ້, ການຕັດຕໍ່ອື່ນໆໃຊ້ໄດ້ປົກກະຕິ';
     $('#aiStatus').innerHTML = msg;
     $('#ttsStatus').innerHTML = msg;
+    offline = true;
+    $('#inboxLink').hidden = true;
+    $('#settingsBtn').hidden = true;
   }
 }
 
@@ -566,10 +590,11 @@ function applyGeneratedSubs(segs, replace) {
 }
 
 $('#autoSubBtn').addEventListener('click', async () => {
+  if (offline) { toast(OFFLINE_MSG, 'warn'); return; }
   if (!aiReady) { openModal('settingsModal'); return; }
   const lang = $('#subLang').value;
   const replace = $('#subReplace').checked;
-  if (!replace && state.project.tracks.subs.length && !confirm('ຈະເພີ່ມຊັບໃໝ່ໃສ່ບ່ອນທີ່ຍັງວ່າງ. ສືບຕໍ່ບໍ?')) return;
+  if (!replace && state.project.tracks.subs.length && !(await ask('ຈະເພີ່ມຊັບໃໝ່ໃສ່ບ່ອນທີ່ຍັງວ່າງ. ສືບຕໍ່ບໍ?', 'ສືບຕໍ່'))) return;
   try {
     busy('ກຳລັງກຽມສຽງ...', 0);
     const samples = await mixTimelineAudio({ includeMusic: $('#subMusic').checked, onProgress: busy });
@@ -610,6 +635,7 @@ $('#alignBtn').addEventListener('click', async () => {
 const TRANSLATE_BATCH = 60;
 
 $('#translateBtn').addEventListener('click', async () => {
+  if (offline) { toast(OFFLINE_MSG, 'warn'); return; }
   if (!aiReady) { openModal('settingsModal'); return; }
   const subs = state.project.tracks.subs;
   if (!subs.length) { toast('ຍັງບໍ່ມີຊັບ', 'warn'); return; }
@@ -653,6 +679,7 @@ $('#translateBtn').addEventListener('click', async () => {
 function renderSubList() {
   const subs = state.project.tracks.subs;
   $('#subCount').textContent = subs.length;
+  $('#subCount').toggleAttribute('data-zero', !subs.length);
   $('#subList').innerHTML = subs.length ? subs.map((s, i) => `
     <div class="sub-item" data-id="${s.id}">
       <div class="sub-meta">
@@ -690,7 +717,7 @@ $('#subList').addEventListener('click', e => {
   const item = e.target.closest('.sub-item');
   if (!item) return;
   const id = item.dataset.id;
-  const act = e.target.dataset.act;
+  const act = e.target.closest('[data-act]')?.dataset.act;
   const s = findClip('subs', id);
   if (act === 'seek') { player.seek(s.start + 0.01); select('subs', id); }
   if (act === 'del') commit(p => { p.tracks.subs = p.tracks.subs.filter(x => x.id !== id); });
@@ -754,7 +781,7 @@ $('#shiftBtn').addEventListener('click', () => {
   toast(`ເລື່ອນເວລາຊັບ ${d > 0 ? '+' : ''}${d} ວິ`);
 });
 $('#clearSubsBtn').addEventListener('click', () => {
-  if (confirm('ລຶບຊັບທັງໝົດບໍ?')) commit(p => { p.tracks.subs = []; });
+  ask('ລຶບຊັບທັງໝົດບໍ?', 'ລຶບທັງໝົດ').then(ok => ok && commit(p => { p.tracks.subs = []; }));
 });
 
 async function importSubtitleFile(file) {
@@ -765,17 +792,20 @@ async function importSubtitleFile(file) {
 }
 $('#importSrtBtn').addEventListener('click', () => $('#srtInput').click());
 $('#srtInput').addEventListener('change', e => { if (e.target.files[0]) importSubtitleFile(e.target.files[0]); e.target.value = ''; });
+function saveOrToast(blob, name) {
+  download(blob, name).catch(e => toast(e.message, 'error'));
+}
 const subsForExport = () => {
   const digits = state.project.subStyle.laoDigits;
   return state.project.tracks.subs.map(s => ({ ...s, text: digits ? toLaoDigits(subDisplay(s)) : subDisplay(s) }));
 };
 $('#exportSrtBtn').addEventListener('click', () => {
   if (!state.project.tracks.subs.length) return toast('ຍັງບໍ່ມີຊັບ', 'warn');
-  download(new Blob(['\ufeff' + toSRT(subsForExport())], { type: 'text/plain;charset=utf-8' }), `${state.project.name}.srt`);
+  saveOrToast(new Blob(['\ufeff' + toSRT(subsForExport())], { type: 'text/plain;charset=utf-8' }), `${state.project.name}.srt`);
 });
 $('#exportVttBtn').addEventListener('click', () => {
   if (!state.project.tracks.subs.length) return toast('ຍັງບໍ່ມີຊັບ', 'warn');
-  download(new Blob([toVTT(subsForExport())], { type: 'text/vtt;charset=utf-8' }), `${state.project.name}.vtt`);
+  saveOrToast(new Blob([toVTT(subsForExport())], { type: 'text/vtt;charset=utf-8' }), `${state.project.name}.vtt`);
 });
 
 // ---------------------------------------------------------------- modals
@@ -822,8 +852,7 @@ $('#startExportBtn').addEventListener('click', async () => {
       }
     });
     if (res) {
-      download(res.blob, `${state.project.name}.${res.ext}`);
-      toast('ສົ່ງອອກວິດີໂອສຳເລັດ ✓', 'ok');
+      if (await download(res.blob, `${state.project.name}.${res.ext}`)) toast('ສົ່ງອອກວິດີໂອສຳເລັດ ✓', 'ok');
       closeModal('exportModal');
     }
   } catch (e) {
@@ -835,14 +864,17 @@ $('#startExportBtn').addEventListener('click', async () => {
 $('#cancelExportBtn').addEventListener('click', () => { exportVideo.cancel && exportVideo.cancel(); closeModal('exportModal'); });
 
 const voiceover = initVoiceover({
-  $, toast, busy, openModal, createMedia, discardMedia, adoptMedia,
+  $, toast, busy, createMedia, discardMedia, adoptMedia,
+  openModal: id => (offline ? toast(OFFLINE_MSG, 'warn') : openModal(id)),
   getStatus: () => aiStatus
 });
 
 // ---------------------------------------------------------------- top bar & transport
 $('#projectName').addEventListener('change', e => commit(p => { p.name = e.target.value.trim() || 'ໂປຣເຈັກ'; }));
 $('#aspectSelect').addEventListener('change', e => { commit(p => { p.aspect = e.target.value; }); player.resize(); });
-$('#newProjectBtn').addEventListener('click', () => { if (confirm('ເລີ່ມໂປຣເຈັກໃໝ່? (ໄຟລ໌ສື່ຍັງຢູ່)')) resetProject(); });
+$('#newProjectBtn').addEventListener('click', async () => {
+  if (await ask('ເລີ່ມໂປຣເຈັກໃໝ່? ໄຟລ໌ສື່ຍັງຢູ່ໃນຄັງ, ຍົກເລີກ (Ctrl+Z) ໄດ້', 'ເລີ່ມໃໝ່')) resetProject();
+});
 $('#undoBtn').addEventListener('click', undo);
 $('#redoBtn').addEventListener('click', redo);
 $('#playBtn').addEventListener('click', () => player.toggle());
@@ -889,12 +921,15 @@ function renderTop() {
   $('#projectName').value = state.project.name;
   $('#aspectSelect').value = state.project.aspect;
   $('#stage').dataset.aspect = state.project.aspect;
+  $('#aspectChip').textContent = state.project.aspect;
+  const t = state.project.tracks;
+  $('#stage').classList.toggle('empty', !t.video.length && !t.audio.length && !t.text.length && !t.subs.length);
 }
 
 function renderTransport() {
   $('#timeNow').textContent = fmtTime(state.time, 2);
   $('#timeTotal').textContent = fmtTime(totalDuration(), 2);
-  $('#playBtn').textContent = state.playing ? '❚❚' : '▶';
+  $('#playBtn use').setAttribute('href', state.playing ? '#i-pause' : '#i-play');
 }
 
 subscribe(kind => {

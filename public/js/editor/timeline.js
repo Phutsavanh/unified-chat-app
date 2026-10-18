@@ -4,10 +4,10 @@ import { state, emit, checkpoint, videoLayout, totalDuration, findClip, clipDura
 import { fmtTime, clamp } from './util.js';
 
 export const TRACKS = [
-  { key: 'text', label: 'ຂໍ້ຄວາມ', icon: 'T' },
-  { key: 'subs', label: 'ຊັບໄຕເຕິ້ນ', icon: 'CC' },
-  { key: 'video', label: 'ວິດີໂອຫຼັກ', icon: '▶' },
-  { key: 'audio', label: 'ສຽງ / ເພງ', icon: '♪' }
+  { key: 'text', label: 'ຂໍ້ຄວາມ', icon: 'type' },
+  { key: 'subs', label: 'ຊັບໄຕເຕິ້ນ', icon: 'cc' },
+  { key: 'video', label: 'ວິດີໂອຫຼັກ', icon: 'film' },
+  { key: 'audio', label: 'ສຽງ / ເພງ', icon: 'music' }
 ];
 
 const MIN_LEN = 0.1;
@@ -20,7 +20,7 @@ export class Timeline {
     root.innerHTML = `
       <div class="tl-labels">
         <div class="tl-label tl-label-ruler"></div>
-        ${TRACKS.map(t => `<div class="tl-label tl-row-${t.key}"><span class="ico">${t.icon}</span>${t.label}</div>`).join('')}
+        ${TRACKS.map(t => `<div class="tl-label tl-row-${t.key}"><span class="ico"><svg class="i"><use href="#i-${t.icon}"/></svg></span>${t.label}</div>`).join('')}
       </div>
       <div class="tl-scroll">
         <div class="tl-inner">

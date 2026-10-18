@@ -78,7 +78,24 @@ export function encodeWav(samples, sampleRate) {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
-export function download(blob, filename) {
+// On claude.ai the page can't start downloads itself; the viewer's `downloads`
+// capability asks them to save instead. Elsewhere a plain link click works.
+let saver;
+export async function download(blob, filename) {
+  if (window.claude && window.claude.use) {
+    if (saver === undefined) saver = await window.claude.use('downloads');
+    if (saver) {
+      try {
+        await saver.save({ filename, data: blob });
+        return true;
+      } catch (e) {
+        if (e.code === 'declined') return false;
+        // .srt/.vtt aren't on the viewer's allowlist; plain text is
+        if (e.code === 'rejected_extension' && /\.(srt|vtt)$/.test(filename)) return download(blob, `${filename}.txt`);
+        throw new Error(`ບັນທຶກໄຟລ໌ບໍ່ໄດ້ (${e.code || e.message})`);
+      }
+    }
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
@@ -86,6 +103,7 @@ export function download(blob, filename) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  return true;
 }
 
 export function hexToRgba(hex, alpha) {

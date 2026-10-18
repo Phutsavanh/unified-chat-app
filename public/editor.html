@@ -3,16 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LaoCut — ໂປຣແກຣມຕັດຕໍ່ວິດີໂອພາສາລາວ</title>
+<title>LaoCut ລາວຄັດ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;700&family=Noto+Sans+Lao+Looped:wght@400;700&family=Noto+Serif+Lao:wght@400;700&family=Phetsarath:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&family=Noto+Sans+Lao+Looped:wght@400;700&family=Noto+Serif+Lao:wght@400;700&family=Phetsarath:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="css/editor.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M2 13h5M2 18h5M17 8h5M17 13h5M17 18h5"/></symbol>
+    <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></symbol>
+    <symbol id="i-cc" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12h1M7 8v8M11 4v16M15 7v10M19 10v4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-new" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></symbol>
+    <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-start" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8z"/><path d="M5 19V5"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  </defs>
+</svg>
 <div class="editor">
   <header class="topbar">
-    <div class="brand"><span class="logo">▶</span> LaoCut</div>
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></span>
+      <span class="brand-name">LaoCut <small>ລາວຄັດ</small></span>
+    </div>
     <input id="projectName" class="project-name" title="ຊື່ໂປຣເຈັກ">
     <select id="aspectSelect" title="ອັດຕາສ່ວນຈໍ">
       <option value="16:9">16:9 YouTube</option>
@@ -21,26 +56,30 @@
       <option value="4:5">4:5 Facebook</option>
     </select>
     <div class="spacer"></div>
-    <button id="undoBtn" class="icon" title="ຍົກເລີກ (Ctrl+Z)">↶</button>
-    <button id="redoBtn" class="icon" title="ເຮັດຄືນ (Ctrl+Y)">↷</button>
-    <button id="newProjectBtn" title="ໂປຣເຈັກໃໝ່">ໃໝ່</button>
-    <button id="settingsBtn" class="icon" title="ຕັ້ງຄ່າ AI">⚙</button>
-    <a href="/" class="link" title="ກັບໄປໜ້າ Inbox">Inbox</a>
-    <button id="exportBtn" class="primary">⤓ ສົ່ງອອກ</button>
+    <div class="btn-group">
+      <button id="undoBtn" class="icon ghost" title="ຍົກເລີກ (Ctrl+Z)" aria-label="ຍົກເລີກ"><svg class="i"><use href="#i-undo"/></svg></button>
+      <button id="redoBtn" class="icon ghost" title="ເຮັດຄືນ (Ctrl+Y)" aria-label="ເຮັດຄືນ"><svg class="i"><use href="#i-redo"/></svg></button>
+    </div>
+    <button id="newProjectBtn" class="ghost" title="ເລີ່ມໂປຣເຈັກໃໝ່"><svg class="i"><use href="#i-new"/></svg><span>ໃໝ່</span></button>
+    <button id="settingsBtn" class="icon ghost" title="ຕັ້ງຄ່າ AI" aria-label="ຕັ້ງຄ່າ AI"><svg class="i"><use href="#i-gear"/></svg></button>
+    <a href="/" id="inboxLink" class="ghost-link" title="ກັບໄປໜ້າ Inbox"><svg class="i"><use href="#i-inbox"/></svg><span>Inbox</span></a>
+    <button id="exportBtn" class="primary"><svg class="i"><use href="#i-download"/></svg><span>ສົ່ງອອກ</span></button>
   </header>
 
+  <nav class="rail tabs" aria-label="ເຄື່ອງມື">
+    <button data-tab="media" class="active"><svg class="i"><use href="#i-film"/></svg><span>ສື່</span></button>
+    <button data-tab="text"><svg class="i"><use href="#i-type"/></svg><span>ຂໍ້ຄວາມ</span></button>
+    <button data-tab="auto"><svg class="i"><use href="#i-sparkles"/></svg><span>ຊັບ AI</span></button>
+    <button data-tab="voice"><svg class="i"><use href="#i-mic"/></svg><span>ສຽງພາກ</span></button>
+    <button data-tab="subs"><svg class="i"><use href="#i-cc"/></svg><span>ລາຍການຊັບ</span><b id="subCount" class="badge">0</b></button>
+  </nav>
+
   <aside class="left">
-    <nav class="tabs">
-      <button data-tab="media" class="active">🎞 ສື່</button>
-      <button data-tab="text">T ຂໍ້ຄວາມ</button>
-      <button data-tab="auto">✨ ຊັບອັດຕະໂນມັດ</button>
-      <button data-tab="voice">🎙 ສຽງພາກ</button>
-      <button data-tab="subs">CC ລາຍການຊັບ <span id="subCount" class="badge">0</span></button>
-    </nav>
 
     <section class="tab-panel" id="tab-media">
+      <h3 class="panel-title">ສື່ຂອງໂປຣເຈັກ</h3>
       <div class="panel-head">
-        <button id="importBtn" class="primary wide">+ ນຳເຂົ້າ ວິດີໂອ / ຮູບ / ເພງ</button>
+        <button id="importBtn" class="primary wide"><svg class="i"><use href="#i-upload"/></svg><span>ນຳເຂົ້າ ວິດີໂອ / ຮູບ / ເພງ</span></button>
         <input type="file" id="fileInput" multiple accept="video/*,audio/*,image/*,.srt,.vtt" hidden>
       </div>
       <div id="mediaList" class="media-grid"></div>
@@ -48,15 +87,16 @@
     </section>
 
     <section class="tab-panel" id="tab-text" hidden>
-      <h4>ເລືອກຮູບແບບຂໍ້ຄວາມ</h4>
+      <h3 class="panel-title">ຂໍ້ຄວາມ</h3>
+      <p class="hint">ກົດຮູບແບບເພື່ອເພີ່ມຂໍ້ຄວາມທີ່ເສັ້ນເວລາ</p>
       <div id="textPresets" class="presets"></div>
-      <p class="hint">ຂໍ້ຄວາມຈະຖືກເພີ່ມທີ່ເສັ້ນເວລາ. ລາກຂໍ້ຄວາມໃນຈໍເພື່ອຍ້າຍຕຳແໜ່ງ.<br>
-        ຮອງຮັບຟອນລາວ 4 ແບບ ແລະ ຕັດແຖວຕາມຄຳລາວອັດຕະໂນມັດ.</p>
+      <p class="hint">ລາກຂໍ້ຄວາມໃນຈໍເພື່ອຍ້າຍຕຳແໜ່ງ. ຮອງຮັບຟອນລາວ 4 ແບບ ແລະ ຕັດແຖວຕາມຄຳລາວອັດຕະໂນມັດ.</p>
     </section>
 
     <section class="tab-panel" id="tab-auto" hidden>
+      <h3 class="panel-title">ຊັບອັດຕະໂນມັດ</h3>
       <div class="card">
-        <h4>✨ ສ້າງຊັບດ້ວຍ AI (Whisper)</h4>
+        <h4><svg class="i"><use href="#i-sparkles"/></svg>ສ້າງຊັບດ້ວຍ AI</h4>
         <div id="aiStatus" class="status">...</div>
         <label>ພາສາທີ່ເວົ້າໃນວິດີໂອ
           <select id="subLang">
@@ -76,12 +116,12 @@
         <label class="check"><input type="checkbox" id="subReplace" checked> ແທນທີ່ຊັບເກົ່າທັງໝົດ</label>
         <label class="check"><input type="checkbox" id="subMusic"> ລວມສຽງຈາກແທຣັກເພງນຳ</label>
         <label class="check"><input type="checkbox" id="subModernHo"> ຂຽນ ໜ/ໝ ແທນ ຫນ/ຫມ</label>
-        <button id="autoSubBtn" class="primary wide">✨ ສ້າງຊັບອັດຕະໂນມັດ</button>
+        <button id="autoSubBtn" class="primary wide"><svg class="i"><use href="#i-sparkles"/></svg><span>ສ້າງຊັບອັດຕະໂນມັດ</span></button>
         <p class="hint">ສຽງຈາກ timeline ຈະຖືກສົ່ງໄປຖອດຄວາມ, ແລ້ວແບ່ງແຖວຕາມຄຳລາວໃຫ້ອ່ານງ່າຍ. ຄວາມຍາວແຖວປັບໄດ້ທີ່ "ຮູບແບບຊັບ".</p>
       </div>
 
       <div class="card">
-        <h4>🌐 ແປຊັບ (AI)</h4>
+        <h4><svg class="i"><use href="#i-globe"/></svg>ແປຊັບ (AI)</h4>
         <label>ແປເປັນພາສາ
           <select id="trTo">
             <option value="en" selected>English</option>
@@ -100,20 +140,20 @@
             <option value="replace">ແທນທີ່ຂໍ້ຄວາມເດີມ</option>
           </select>
         </label>
-        <button id="translateBtn" class="wide">🌐 ແປຊັບທັງໝົດ</button>
+        <button id="translateBtn" class="wide"><svg class="i"><use href="#i-globe"/></svg><span>ແປຊັບທັງໝົດ</span></button>
         <p class="hint">ພາສາຕົ້ນສະບັບ = "ພາສາທີ່ເວົ້າໃນວິດີໂອ" ຂ້າງເທິງ. ແປຊ້ຳໄດ້, ຄຳແປເກົ່າຈະຖືກແທນທີ່.</p>
       </div>
 
       <div class="card">
-        <h4>🎙 ຈັດເວລາຊັບຈາກບົດ (ບໍ່ຕ້ອງໃຊ້ AI)</h4>
+        <h4><svg class="i"><use href="#i-wave"/></svg>ຈັດເວລາຊັບຈາກບົດ <em class="tag">ບໍ່ໃຊ້ AI</em></h4>
         <p class="hint">ວາງບົດເວົ້າພາສາລາວ ແລ້ວໂປຣແກຣມຈະຈັບຈັງຫວະສຽງເວົ້າ ແລະ ວາງຊັບໃຫ້ອັດຕະໂນມັດ.
           ຖ້າປະວ່າງ ຈະສ້າງຊ່ອງວ່າງຕາມສຽງເວົ້າໃຫ້ພິມເອງ.</p>
         <textarea id="scriptInput" rows="6" lang="lo" placeholder="ສະບາຍດີທຸກຄົນ ມື້ນີ້ພວກເຮົາຈະພາໄປທ່ຽວຫຼວງພະບາງ..."></textarea>
-        <button id="alignBtn" class="wide">🎙 ຈັດເວລາຕາມສຽງເວົ້າ</button>
+        <button id="alignBtn" class="wide"><svg class="i"><use href="#i-wave"/></svg><span>ຈັດເວລາຕາມສຽງເວົ້າ</span></button>
       </div>
 
       <div class="card">
-        <h4>📄 ໄຟລ໌ຊັບ</h4>
+        <h4><svg class="i"><use href="#i-file"/></svg>ໄຟລ໌ຊັບ</h4>
         <div class="row">
           <button id="importSrtBtn">ນຳເຂົ້າ SRT/VTT</button>
           <button id="exportSrtBtn">ສົ່ງອອກ .srt</button>
@@ -124,8 +164,9 @@
     </section>
 
     <section class="tab-panel" id="tab-voice" hidden>
+      <h3 class="panel-title">ສຽງພາກ AI</h3>
       <div class="card">
-        <h4>🎙 ສຽງພາກ AI</h4>
+        <h4><svg class="i"><use href="#i-mic"/></svg>ເລືອກສຽງ</h4>
         <div id="ttsStatus" class="status">...</div>
         <label>ລະບົບສຽງ
           <select id="ttsEngine">
@@ -146,8 +187,8 @@
         <h4>ພາກຈາກຂໍ້ຄວາມ</h4>
         <textarea id="ttsText" rows="5" lang="lo" placeholder="ສະບາຍດີທຸກຄົນ ຍິນດີຕ້ອນຮັບສູ່ຊ່ອງຂອງພວກເຮົາ..."></textarea>
         <div class="row">
-          <button id="ttsPreviewBtn">▶ ຟັງຕົວຢ່າງ</button>
-          <button id="ttsAddBtn" class="primary">+ ເພີ່ມທີ່ເສັ້ນເວລາ</button>
+          <button id="ttsPreviewBtn"><svg class="i"><use href="#i-play"/></svg><span>ຟັງຕົວຢ່າງ</span></button>
+          <button id="ttsAddBtn" class="primary"><svg class="i"><use href="#i-plus"/></svg><span>ເພີ່ມທີ່ເສັ້ນເວລາ</span></button>
         </div>
       </div>
 
@@ -158,12 +199,13 @@
         <label class="check"><input type="checkbox" id="ttsDuck" checked> ຫຼຸດສຽງວິດີໂອເດີມລົງເຫຼືອ 20%</label>
         <label class="check"><input type="checkbox" id="ttsUseTr"> ໃຊ້ແຖວຄຳແປ (ພາກເປັນພາສາອື່ນ)</label>
         <label class="check"><input type="checkbox" id="ttsReplace" checked> ແທນທີ່ສຽງພາກຕາມຊັບເກົ່າ</label>
-        <button id="ttsSubsBtn" class="primary wide">🎙 ພາກສຽງຕາມຊັບທັງໝົດ</button>
+        <button id="ttsSubsBtn" class="primary wide"><svg class="i"><use href="#i-mic"/></svg><span>ພາກສຽງຕາມຊັບທັງໝົດ</span></button>
       </div>
       <p class="hint">ເມື່ອໃຊ້ໃນໂຄສະນາ ຫຼື ຂ່າວ ຄວນບອກຜູ້ຊົມວ່າເປັນສຽງ AI.</p>
     </section>
 
     <section class="tab-panel" id="tab-subs" hidden>
+      <h3 class="panel-title">ລາຍການຊັບ</h3>
       <div class="card compact">
         <div class="row">
           <input id="findInput" lang="lo" placeholder="ຊອກຫາ">
@@ -190,16 +232,30 @@
   <main class="center">
     <div id="stage" class="stage" data-aspect="16:9">
       <canvas id="preview"></canvas>
+      <div class="welcome" id="welcome">
+        <div class="welcome-mark" aria-hidden="true"><svg class="i"><use href="#i-film"/></svg></div>
+        <h2>ເລີ່ມຕັດຕໍ່ວິດີໂອຂອງທ່ານ</h2>
+        <p>ລາກວິດີໂອ, ຮູບ ຫຼື ເພງ ມາວາງບ່ອນນີ້ — ຫຼື ກົດປຸ່ມລຸ່ມນີ້</p>
+        <button id="welcomeImportBtn" class="primary"><svg class="i"><use href="#i-upload"/></svg><span>ນຳເຂົ້າໄຟລ໌</span></button>
+        <ul class="welcome-steps">
+          <li><b>1</b> ນຳເຂົ້າວິດີໂອ</li>
+          <li><b>2</b> ສ້າງຊັບລາວອັດຕະໂນມັດ</li>
+          <li><b>3</b> ສົ່ງອອກເປັນ MP4</li>
+        </ul>
+      </div>
     </div>
     <div class="transport">
-      <span class="time"><b id="timeNow">00:00.00</b> / <span id="timeTotal">00:00.00</span></span>
+      <span class="time"><b id="timeNow">00:00.00</b><i>/</i><span id="timeTotal">00:00.00</span></span>
       <div class="transport-buttons">
-        <button id="backBtn" class="icon" title="ໄປຕົ້ນ (Home)">⏮</button>
-        <button id="prevFrame" class="icon" title="ຖອຍ 1 ເຟຣມ (←)">◁</button>
-        <button id="playBtn" class="play" title="ຫຼິ້ນ / ຢຸດ (Space)">▶</button>
-        <button id="nextFrame" class="icon" title="ໜ້າ 1 ເຟຣມ (→)">▷</button>
+        <button id="backBtn" class="icon ghost" title="ໄປຕົ້ນ (Home)" aria-label="ໄປຕົ້ນ"><svg class="i"><use href="#i-start"/></svg></button>
+        <button id="prevFrame" class="icon ghost" title="ຖອຍ 1 ເຟຣມ (←)" aria-label="ຖອຍ 1 ເຟຣມ"><svg class="i"><use href="#i-left"/></svg></button>
+        <button id="playBtn" class="play" title="ຫຼິ້ນ / ຢຸດ (Space)" aria-label="ຫຼິ້ນ / ຢຸດ"><svg class="i"><use href="#i-play"/></svg></button>
+        <button id="nextFrame" class="icon ghost" title="ໜ້າ 1 ເຟຣມ (→)" aria-label="ໜ້າ 1 ເຟຣມ"><svg class="i"><use href="#i-right"/></svg></button>
       </div>
-      <button id="fullscreenBtn" class="icon" title="ເຕັມຈໍ">⛶</button>
+      <div class="transport-right">
+        <span class="aspect-chip" id="aspectChip">16:9</span>
+        <button id="fullscreenBtn" class="icon ghost" title="ເຕັມຈໍ" aria-label="ເຕັມຈໍ"><svg class="i"><use href="#i-full"/></svg></button>
+      </div>
     </div>
   </main>
 
@@ -209,13 +265,14 @@
 
   <footer class="bottom">
     <div class="tl-toolbar">
-      <button id="splitBtn" title="ຕັດ (S / Ctrl+B)">✂ ຕັດ</button>
-      <button id="deleteBtn" title="ລຶບ (Delete)">🗑 ລຶບ</button>
-      <button id="dupBtn" title="ສຳເນົາ (Ctrl+D)">⧉ ສຳເນົາ</button>
-      <button id="addSubBtn" title="ເພີ່ມຊັບທີ່ເສັ້ນເວລາ (T)">+ ຊັບ</button>
+      <button id="splitBtn" class="tool" title="ຕັດ (S / Ctrl+B)"><svg class="i"><use href="#i-cut"/></svg><span>ຕັດ</span></button>
+      <button id="deleteBtn" class="tool" title="ລຶບ (Delete)"><svg class="i"><use href="#i-trash"/></svg><span>ລຶບ</span></button>
+      <button id="dupBtn" class="tool" title="ສຳເນົາ (Ctrl+D)"><svg class="i"><use href="#i-copy"/></svg><span>ສຳເນົາ</span></button>
+      <span class="tool-sep"></span>
+      <button id="addSubBtn" class="tool" title="ເພີ່ມຊັບທີ່ເສັ້ນເວລາ (T)"><svg class="i"><use href="#i-cc"/></svg><span>ເພີ່ມຊັບ</span></button>
       <div class="spacer"></div>
-      <span class="hint">Space ຫຼິ້ນ · S ຕັດ · T ເພີ່ມຊັບ · Ctrl+ລໍ້ເມົ້າ ຊູມ</span>
-      <label class="zoom">🔍 <input id="zoomRange" type="range" min="4" max="400" value="60"></label>
+      <span class="keys"><kbd>Space</kbd> ຫຼິ້ນ <kbd>S</kbd> ຕັດ <kbd>T</kbd> ເພີ່ມຊັບ <kbd>Ctrl</kbd>+ລໍ້ເມົ້າ ຊູມ</span>
+      <label class="zoom" title="ຊູມ timeline"><svg class="i"><use href="#i-zoom"/></svg><input id="zoomRange" type="range" min="4" max="400" value="60" aria-label="ຊູມ timeline"></label>
     </div>
     <div id="timeline" class="timeline"></div>
   </footer>
@@ -231,13 +288,13 @@
 
 <div id="settingsModal" class="modal" hidden>
   <div class="modal-card">
-    <h3>⚙ ຕັ້ງຄ່າ AI ສ້າງຊັບ</h3>
+    <h3>ຕັ້ງຄ່າ AI</h3>
     <p class="hint">ການສ້າງຊັບ ແລະ ແປຊັບດ້ວຍ AI ໃຊ້ OpenAI (Whisper ຮອງຮັບພາສາລາວ). ສ້າງ API Key ໄດ້ທີ່
       <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>
       (ຄ່າໃຊ້ຈ່າຍປະມານ $0.006 ຕໍ່ນາທີ). Key ຖືກເກັບໄວ້ທີ່ເຊີບເວີເທົ່ານັ້ນ.</p>
     <label>OpenAI API Key <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"></label>
     <p id="apiKeyEnvNote" class="hint" hidden>ໃຊ້ Key ຈາກ environment variable <code>OPENAI_API_KEY</code> ຢູ່.</p>
-    <h4>🎙 ສຽງພາກລາວ (Microsoft Azure Speech)</h4>
+    <h4>ສຽງພາກລາວ (Microsoft Azure Speech)</h4>
     <p class="hint">ມີສຽງລາວແທ້ 2 ສຽງ (ຍິງ/ຊາຍ). ສ້າງ Speech resource ທີ່
       <a href="https://portal.azure.com" target="_blank" rel="noopener">portal.azure.com</a>
       ແລ້ວເອົາ Key ແລະ Region ມາໃສ່. ແຜນຟຣີໃຊ້ໄດ້ 500,000 ຕົວອັກສອນ/ເດືອນ.</p>
@@ -253,7 +310,7 @@
 
 <div id="exportModal" class="modal" hidden>
   <div class="modal-card">
-    <h3>⤓ ສົ່ງອອກວິດີໂອ</h3>
+    <h3>ສົ່ງອອກວິດີໂອ</h3>
     <label>ຮູບແບບໄຟລ໌ <select id="exportFormat"></select></label>
     <label>ຄວາມລະອຽດ <select id="exportRes"></select></label>
     <p id="exportInfo" class="hint"></p>
@@ -265,6 +322,16 @@
     <div class="modal-actions">
       <button id="cancelExportBtn">ຍົກເລີກ</button>
       <button id="startExportBtn" class="primary">ເລີ່ມສົ່ງອອກ</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal" hidden>
+  <div class="modal-card confirm-card">
+    <p id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button id="confirmNo">ຍົກເລີກ</button>
+      <button id="confirmYes" class="primary">ຕົກລົງ</button>
     </div>
   </div>
 </div>
