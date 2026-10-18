@@ -113,7 +113,7 @@ output { color: var(--accent); float: right; }
 
 /* ---------- tabs ---------- */
 .tabs {
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   position: sticky; top: 0; z-index: 2;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -219,7 +219,7 @@ output { color: var(--accent); float: right; }
 }
 .tl-toolbar .hint { margin: 0 10px 0 0; }
 .zoom { display: flex; align-items: center; gap: 6px; margin: 0; width: 160px; }
-.timeline { flex: 1; display: flex; min-height: 0; }
+.timeline { flex: 1; display: flex; min-height: 0; overflow-y: auto; align-items: flex-start; }
 .tl-labels { width: 110px; flex-shrink: 0; border-right: 1px solid var(--border); }
 .tl-label {
   display: flex; align-items: center; gap: 6px;
@@ -229,6 +229,7 @@ output { color: var(--accent); float: right; }
 }
 .tl-label .ico { width: 20px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text); }
 .tl-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+.tl-labels { position: sticky; left: 0; }
 .tl-inner { position: relative; min-height: 100%; }
 .tl-ruler, .tl-label-ruler { height: 26px; }
 .tl-ruler { position: relative; border-bottom: 1px solid var(--border); cursor: pointer; }
@@ -285,6 +286,8 @@ output { color: var(--accent); float: right; }
   border-radius: 14px;
   padding: 22px;
   width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
 }
 .busy-card { text-align: center; }
 .spinner { width: 34px; height: 34px; margin: 0 auto 12px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }

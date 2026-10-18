@@ -34,6 +34,7 @@
       <button data-tab="media" class="active">🎞 ສື່</button>
       <button data-tab="text">T ຂໍ້ຄວາມ</button>
       <button data-tab="auto">✨ ຊັບອັດຕະໂນມັດ</button>
+      <button data-tab="voice">🎙 ສຽງພາກ</button>
       <button data-tab="subs">CC ລາຍການຊັບ <span id="subCount" class="badge">0</span></button>
     </nav>
 
@@ -122,6 +123,46 @@
       </div>
     </section>
 
+    <section class="tab-panel" id="tab-voice" hidden>
+      <div class="card">
+        <h4>🎙 ສຽງພາກ AI</h4>
+        <div id="ttsStatus" class="status">...</div>
+        <label>ລະບົບສຽງ
+          <select id="ttsEngine">
+            <option value="azure" selected>Microsoft Azure — ສຽງລາວແທ້ (ແນະນຳ)</option>
+            <option value="openai">OpenAI — ສຳນຽງຕ່າງປະເທດ</option>
+          </select>
+        </label>
+        <label>ສຽງ <select id="ttsVoice"></select></label>
+        <label>ຄວາມໄວ <output id="ttsRateOut">0%</output>
+          <input type="range" id="ttsRate" min="-50" max="50" step="5" value="0">
+        </label>
+        <label id="ttsPitchWrap">ສຽງສູງ-ຕ່ຳ <output id="ttsPitchOut">0%</output>
+          <input type="range" id="ttsPitch" min="-20" max="20" step="2" value="0">
+        </label>
+      </div>
+
+      <div class="card">
+        <h4>ພາກຈາກຂໍ້ຄວາມ</h4>
+        <textarea id="ttsText" rows="5" lang="lo" placeholder="ສະບາຍດີທຸກຄົນ ຍິນດີຕ້ອນຮັບສູ່ຊ່ອງຂອງພວກເຮົາ..."></textarea>
+        <div class="row">
+          <button id="ttsPreviewBtn">▶ ຟັງຕົວຢ່າງ</button>
+          <button id="ttsAddBtn" class="primary">+ ເພີ່ມທີ່ເສັ້ນເວລາ</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>ພາກຕາມຊັບໄຕເຕິ້ນ</h4>
+        <p class="hint">ສ້າງສຽງພາກໃຫ້ທຸກແຖວຊັບ ແລະ ວາງໃຫ້ກົງກັບເວລາຂອງແຕ່ລະແຖວ.</p>
+        <label class="check"><input type="checkbox" id="ttsFit" checked> ເລັ່ງສຽງອັດຕະໂນມັດ ຖ້າຍາວເກີນແຖວຖັດໄປ</label>
+        <label class="check"><input type="checkbox" id="ttsDuck" checked> ຫຼຸດສຽງວິດີໂອເດີມລົງເຫຼືອ 20%</label>
+        <label class="check"><input type="checkbox" id="ttsUseTr"> ໃຊ້ແຖວຄຳແປ (ພາກເປັນພາສາອື່ນ)</label>
+        <label class="check"><input type="checkbox" id="ttsReplace" checked> ແທນທີ່ສຽງພາກຕາມຊັບເກົ່າ</label>
+        <button id="ttsSubsBtn" class="primary wide">🎙 ພາກສຽງຕາມຊັບທັງໝົດ</button>
+      </div>
+      <p class="hint">ເມື່ອໃຊ້ໃນໂຄສະນາ ຫຼື ຂ່າວ ຄວນບອກຜູ້ຊົມວ່າເປັນສຽງ AI.</p>
+    </section>
+
     <section class="tab-panel" id="tab-subs" hidden>
       <div class="card compact">
         <div class="row">
@@ -196,6 +237,12 @@
       (ຄ່າໃຊ້ຈ່າຍປະມານ $0.006 ຕໍ່ນາທີ). Key ຖືກເກັບໄວ້ທີ່ເຊີບເວີເທົ່ານັ້ນ.</p>
     <label>OpenAI API Key <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"></label>
     <p id="apiKeyEnvNote" class="hint" hidden>ໃຊ້ Key ຈາກ environment variable <code>OPENAI_API_KEY</code> ຢູ່.</p>
+    <h4>🎙 ສຽງພາກລາວ (Microsoft Azure Speech)</h4>
+    <p class="hint">ມີສຽງລາວແທ້ 2 ສຽງ (ຍິງ/ຊາຍ). ສ້າງ Speech resource ທີ່
+      <a href="https://portal.azure.com" target="_blank" rel="noopener">portal.azure.com</a>
+      ແລ້ວເອົາ Key ແລະ Region ມາໃສ່. ແຜນຟຣີໃຊ້ໄດ້ 500,000 ຕົວອັກສອນ/ເດືອນ.</p>
+    <label>Azure Speech Key <input id="azureKeyInput" type="password" autocomplete="off"></label>
+    <label>Region <input id="azureRegionInput" placeholder="southeastasia" autocomplete="off"></label>
     <p class="hint">ບໍ່ມີ Key? ໃຊ້ "ຈັດເວລາຊັບຈາກບົດ" ທີ່ເຮັດວຽກໃນເຄື່ອງໄດ້ເລີຍ.</p>
     <div class="modal-actions">
       <button data-close>ປິດ</button>

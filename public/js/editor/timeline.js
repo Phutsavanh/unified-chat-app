@@ -65,9 +65,16 @@ export class Timeline {
       return mk('video', l.clip, l.start, l.end, `${m ? m.name : '?'} · ${fmtTime(l.end - l.start)}`, bg);
     }).join('') || `<div class="tl-empty">ລາກວິດີໂອ ຫຼື ຮູບ ມາວາງບ່ອນນີ້</div>`;
 
+    // overlapping audio (music + voiceover) stacks into lanes
+    const { lane, count } = audioLanes(state.project.tracks.audio);
+    const laneH = 30;
+    const rowH = `${Math.max(40, count * laneH + 8)}px`;
+    this.rows.audio.style.height = rowH;
+    this.root.querySelector('.tl-label.tl-row-audio').style.height = rowH;
     this.rows.audio.innerHTML = state.project.tracks.audio.map(c => {
       const m = state.media.get(c.mediaId);
-      return mk('audio', c, c.start, c.start + clipDuration(c), m ? m.name : '?');
+      const pos = count > 1 ? `top:${4 + lane.get(c.id) * laneH}px;bottom:auto;height:${laneH - 4}px;` : '';
+      return mk('audio', c, c.start, c.start + clipDuration(c), m ? m.name : '?', pos);
     }).join('');
     this.rows.text.innerHTML = state.project.tracks.text.map(c => mk('text', c, c.start, c.end, c.text)).join('');
     this.rows.subs.innerHTML = state.project.tracks.subs.map(c => mk('subs', c, c.start, c.end, c.text)).join('');
@@ -260,6 +267,19 @@ export class Timeline {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
+}
+
+// Greedy interval partitioning: each clip goes in the first lane that is free.
+function audioLanes(clips) {
+  const ends = [];
+  const lane = new Map();
+  for (const c of [...clips].sort((a, b) => a.start - b.start)) {
+    let i = ends.findIndex(e => e <= c.start + 1e-3);
+    if (i < 0) i = ends.length;
+    ends[i] = c.start + clipDuration(c);
+    lane.set(c.id, i);
+  }
+  return { lane, count: Math.max(1, ends.length) };
 }
 
 export function escapeHtml(s) {

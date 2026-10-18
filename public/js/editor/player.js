@@ -149,6 +149,11 @@ export class Player {
     }
     for (const c of state.project.tracks.audio) {
       const d = c.out - c.in;
+      // load upcoming clips early (voiceover lines are many short files)
+      if (state.playing && c.start > t && c.start - t < 1.5) {
+        const m = state.media.get(c.mediaId);
+        if (m) this.element(m);
+      }
       if (t >= c.start && t < c.start + d) {
         const m = state.media.get(c.mediaId);
         if (m) play(m.id, this.element(m), c.in + (t - c.start), c.volume ?? 1);

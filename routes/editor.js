@@ -1,10 +1,11 @@
 // Backend for the Lao video editor (public/editor.html). Editing and rendering
 // happen entirely in the browser; the server only proxies requests to OpenAI
-// (Whisper for automatic subtitles, chat for translation) so the API key never
-// reaches the client.
+// (Whisper subtitles, translation, voiceover) and Azure Speech (Lao voiceover)
+// so API keys never reach the client.
 const express = require('express');
 const { load, save } = require('../db');
 const { requireAuth } = require('./auth');
+const tts = require('../services/tts');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -32,6 +33,14 @@ function apiKey() {
   return process.env.OPENAI_API_KEY || load().editor.openai_api_key || '';
 }
 
+function azureCreds() {
+  const ed = load().editor;
+  return {
+    key: process.env.AZURE_SPEECH_KEY || ed.azure_speech_key || '',
+    region: (process.env.AZURE_SPEECH_REGION || ed.azure_speech_region || '').trim().toLowerCase()
+  };
+}
+
 function mask(v) {
   if (!v) return '';
   if (v.length <= 8) return '••••••••';
@@ -39,20 +48,35 @@ function mask(v) {
 }
 
 router.get('/status', (req, res) => {
+  const ed = load().editor;
+  const az = azureCreds();
   res.json({
     whisper: Boolean(apiKey()),
     fromEnv: Boolean(process.env.OPENAI_API_KEY),
-    key: mask(load().editor.openai_api_key)
+    key: mask(ed.openai_api_key),
+    azure: Boolean(az.key && az.region),
+    azureFromEnv: Boolean(process.env.AZURE_SPEECH_KEY),
+    azureKey: mask(ed.azure_speech_key),
+    azureRegion: az.region
   });
 });
 
+const SETTING_KEYS = ['openai_api_key', 'azure_speech_key', 'azure_speech_region'];
+
 router.post('/settings', (req, res) => {
-  const key = (req.body && req.body.openai_api_key || '').trim();
-  if (key.includes('••••')) return res.json({ ok: true });
+  const region = req.body && req.body.azure_speech_region;
+  if (typeof region === 'string' && !/^[a-z0-9]*$/.test(region.trim().toLowerCase())) {
+    return res.status(400).json({ error: 'Azure region ບໍ່ຖືກຕ້ອງ (ເຊັ່ນ southeastasia)' });
+  }
   const db = load();
-  db.editor.openai_api_key = key;
+  for (const k of SETTING_KEYS) {
+    const v = req.body && req.body[k];
+    // masked values are what /status echoed back: leave the stored key alone
+    if (typeof v !== 'string' || v.includes('••••')) continue;
+    db.editor[k] = k === 'azure_speech_region' ? v.trim().toLowerCase() : v.trim();
+  }
   save();
-  res.json({ ok: true, key: mask(key) });
+  res.json({ ok: true });
 });
 
 router.post('/transcribe',
@@ -157,6 +181,37 @@ router.post('/translate', async (req, res) => {
     res.json({ lines: out.map(l => String(l).trim()) });
   } catch (e) {
     res.status(502).json({ error: `ເຊື່ອມຕໍ່ OpenAI ບໍ່ໄດ້: ${e.message}` });
+  }
+});
+
+// AI voiceover. Returns MP3 bytes.
+router.post('/tts', async (req, res) => {
+  const { engine, voice, text, rate, pitch, lang } = req.body || {};
+  const clean = typeof text === 'string' ? text.trim() : '';
+  if (!clean || clean.length > tts.MAX_TEXT) {
+    return res.status(400).json({ error: `ຂໍ້ຄວາມຕ້ອງມີ 1–${tts.MAX_TEXT} ຕົວອັກສອນ` });
+  }
+  const r = Math.min(100, Math.max(-50, Number(rate) || 0));
+  const p = Math.min(30, Math.max(-30, Number(pitch) || 0));
+  try {
+    let audio;
+    if (engine === 'azure') {
+      if (!tts.AZURE_VOICES[voice]) return res.status(400).json({ error: 'ບໍ່ພົບສຽງນີ້' });
+      const { key, region } = azureCreds();
+      if (!key || !region) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ Azure Speech Key / Region' });
+      audio = await tts.azureSpeak({ key, region, voice, text: clean, rate: r, pitch: p });
+    } else if (engine === 'openai') {
+      if (!tts.OPENAI_VOICES.includes(voice)) return res.status(400).json({ error: 'ບໍ່ພົບສຽງນີ້' });
+      const key = apiKey();
+      if (!key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ OpenAI API Key' });
+      audio = await tts.openaiSpeak({ key, voice, text: clean, rate: r, lang });
+    } else {
+      return res.status(400).json({ error: 'ບໍ່ຮອງຮັບລະບົບສຽງນີ້' });
+    }
+    res.type('audio/mpeg').send(audio);
+  } catch (e) {
+    const msg = e.name === 'TimeoutError' || e.message === 'fetch failed' ? `ເຊື່ອມຕໍ່ບໍລິການສຽງບໍ່ໄດ້ (${e.message})` : e.message;
+    res.status(502).json({ error: msg });
   }
 });
 

@@ -191,7 +191,7 @@ function scheduleSave() {
 
 export async function persistMedia(m) {
   try {
-    await tx('media', 'readwrite', s => s.put({ id: m.id, name: m.name, type: m.type, blob: m.blob }));
+    await tx('media', 'readwrite', s => s.put({ id: m.id, name: m.name, type: m.type, blob: m.blob, hidden: Boolean(m.hidden) }));
   } catch (e) {
     console.warn('ບັນທຶກໄຟລ໌ລົງເບົາເຊີບໍ່ໄດ້ (ພື້ນທີ່ອາດເຕັມ)', e);
   }

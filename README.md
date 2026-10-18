@@ -83,7 +83,12 @@ real-time และตอบกลับจากที่นี่ได้เ�
 2. **ແປຊັບ (AI)** — ແປຊັບເປັນ English, ໄທ, ລາວ ແລະ ອື່ນໆ. ເລືອກໄດ້ວ່າຈະແທນທີ່ ຫຼື ສະແດງ
    ສອງພາສາ (ຄຳແປຢູ່ແຖວລຸ່ມ). ໃຊ້ Key ດຽວກັນ, ປ່ຽນໂມເດລໄດ້ດ້ວຍ `OPENAI_TRANSLATE_MODEL`
    (ຄ່າເລີ່ມຕົ້ນ `gpt-4o-mini`)
-3. **ຈັດເວລາຈາກບົດ (ບໍ່ຕ້ອງໃຊ້ AI)** — ວາງບົດເວົ້າ ແລ້ວໂປຣແກຣມຈະຈັບຈັງຫວະສຽງເວົ້າ ແລະ
+3. **ສຽງພາກ AI ພາສາລາວ** (ແຖບ 🎙 ສຽງພາກ) — ພິມຂໍ້ຄວາມແລ້ວໄດ້ສຽງພາກ, ຫຼື ພາກສຽງໃຫ້ທຸກແຖວຊັບ
+   ແລະ ວາງໃຫ້ກົງເວລາ (ເລັ່ງສຽງອັດຕະໂນມັດຖ້າຍາວເກີນ, ຫຼຸດສຽງວິດີໂອເດີມ, ພາກຈາກແຖວຄຳແປກໍ່ໄດ້).
+   ສຽງລາວແທ້ໃຊ້ **Microsoft Azure Speech** (ແກ້ວມະນີ — ຍິງ, ຈັນທະວົງ — ຊາຍ): ສ້າງ Speech resource
+   ທີ່ portal.azure.com ແລ້ວໃສ່ Key + Region ໃນ ⚙ ຫຼື `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION`
+   (ແຜນຟຣີ 500,000 ຕົວອັກສອນ/ເດືອນ). ຫຼື ໃຊ້ OpenAI (Key ເດີມ, ແຕ່ສຳນຽງລາວບໍ່ເປັນທຳມະຊາດ)
+4. **ຈັດເວລາຈາກບົດ (ບໍ່ຕ້ອງໃຊ້ AI)** — ວາງບົດເວົ້າ ແລ້ວໂປຣແກຣມຈະຈັບຈັງຫວະສຽງເວົ້າ ແລະ
    ວາງຊັບໃຫ້ຕາມຊ່ວງທີ່ເວົ້າ. ຖ້າບໍ່ມີບົດ ຈະສ້າງຊ່ອງວ່າງຕາມສຽງເວົ້າໃຫ້ພິມເອງ
 
 > ແນະນຳ Chrome ຫຼື Edge ລຸ້ນໃໝ່ (ຕ້ອງການ `Intl.Segmenter`, `MediaRecorder` ແລະ Web Audio).
@@ -97,7 +102,8 @@ db.js                   ที่เก็บข้อมูลแบบไฟ�
 routes/auth.js          login / logout / เปลี่ยนรหัสผ่าน
 routes/api.js           conversations / messages / settings / demo seed
 routes/webhooks.js      รับ webhook จาก Meta (Messenger, Instagram, WhatsApp)
-routes/editor.js        API ของโปรแกรมตัดต่อวิดีโอ (ส่งเสียงไปถอดความด้วย Whisper)
+routes/editor.js        API ของโปรแกรมตัดต่อวิดีโอ (ถอดความ Whisper, แปลซับ, เสียงพากย์ AI)
+services/tts.js         เรียก Azure Speech / OpenAI เพื่อสร้างเสียงพากย์
 services/graph.js       เรียก Graph API เพื่อส่งข้อความออก
 services/store.js       normalize ข้อมูลแชทจากทุกแพลตฟอร์มให้เป็นรูปแบบเดียวกัน + broadcast realtime
 public/                 หน้าเว็บ (login, dashboard) และ CSS/JS ฝั่ง client

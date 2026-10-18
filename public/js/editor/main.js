@@ -7,6 +7,7 @@ import { Player } from './player.js';
 import { Timeline, escapeHtml } from './timeline.js';
 import { mixTimelineAudio, transcribe, detectSpeech, alignScript, refineSegments } from './autosub.js';
 import { exportVideo, supportedFormats } from './exporter.js';
+import { initVoiceover } from './voiceover.js';
 import { LAO_FONTS, normalizeLao, toLaoDigits, toArabicDigits, splitAtFraction, hasThaiScript } from './lao.js';
 import { fmtTime, toSRT, toVTT, parseSubtitles, download, clamp } from './util.js';
 
@@ -120,6 +121,26 @@ async function importFiles(files) {
   renderMedia();
 }
 
+// Media made inside the app (AI voiceover). `hidden` keeps per-line clips out
+// of the library; unused hidden files are cleaned up on the next load.
+async function createMedia(blob, name, hidden) {
+  const file = new File([blob], `${name}.mp3`, { type: blob.type || 'audio/mpeg' });
+  const m = { id: newId(), name, type: 'audio', blob: file, url: URL.createObjectURL(file), hidden };
+  await probe(m);
+  if (m.broken) throw new Error('ອ່ານໄຟລ໌ສຽງທີ່ສ້າງບໍ່ໄດ້');
+  return m;
+}
+
+function discardMedia(m) {
+  URL.revokeObjectURL(m.url);
+}
+
+function adoptMedia(m) {
+  state.media.set(m.id, m);
+  persistMedia(m);
+  if (!m.hidden) renderMedia();
+}
+
 function addMediaToTimeline(id, at = null, track = null) {
   const m = state.media.get(id);
   if (!m) return;
@@ -171,7 +192,7 @@ async function removeMedia(id) {
 
 function renderMedia() {
   const list = $('#mediaList');
-  const items = [...state.media.values()];
+  const items = [...state.media.values()].filter(m => !m.hidden);
   list.innerHTML = items.length ? items.map(m => `
     <div class="media-item" draggable="true" data-id="${m.id}" title="${escapeHtml(m.name)}">
       <div class="media-thumb" style="${m.thumb ? `background-image:url(${m.thumb})` : ''}">
@@ -501,13 +522,19 @@ function addSubtitleAtPlayhead() {
 
 // ---------------------------------------------------------------- auto subtitles
 let aiReady = false;
+let aiStatus = {};
 
 async function refreshStatus() {
   try {
     const r = await fetch('/api/editor/status');
     if (r.status === 401) { location.href = '/login.html'; return; }
     const s = await r.json();
+    aiStatus = s;
     aiReady = s.whisper;
+    voiceover.renderStatus();
+    $('#azureKeyInput').value = s.azureKey || '';
+    $('#azureKeyInput').disabled = s.azureFromEnv;
+    $('#azureRegionInput').value = s.azureRegion || '';
     $('#aiStatus').innerHTML = s.whisper
       ? '<span class="dot ok"></span> ເຊື່ອມຕໍ່ AI (Whisper) ແລ້ວ'
       : '<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ API Key — <a href="#" id="openSettings2">ຕັ້ງຄ່າ</a>';
@@ -755,10 +782,14 @@ $('#saveSettingsBtn').addEventListener('click', async () => {
   const r = await fetch('/api/editor/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ openai_api_key: $('#apiKeyInput').value })
+    body: JSON.stringify({
+      openai_api_key: $('#apiKeyInput').value,
+      azure_speech_key: $('#azureKeyInput').value,
+      azure_speech_region: $('#azureRegionInput').value
+    })
   });
   if (r.ok) { toast('ບັນທຶກແລ້ວ', 'ok'); closeModal('settingsModal'); refreshStatus(); }
-  else toast('ບັນທຶກບໍ່ສຳເລັດ', 'error');
+  else toast((await r.json().catch(() => ({}))).error || 'ບັນທຶກບໍ່ສຳເລັດ', 'error');
 });
 
 $('#exportBtn').addEventListener('click', () => {
@@ -797,6 +828,11 @@ $('#startExportBtn').addEventListener('click', async () => {
   $('#exportProgress').hidden = true;
 });
 $('#cancelExportBtn').addEventListener('click', () => { exportVideo.cancel && exportVideo.cancel(); closeModal('exportModal'); });
+
+const voiceover = initVoiceover({
+  $, toast, busy, openModal, createMedia, discardMedia, adoptMedia,
+  getStatus: () => aiStatus
+});
 
 // ---------------------------------------------------------------- top bar & transport
 $('#projectName').addEventListener('change', e => commit(p => { p.name = e.target.value.trim() || 'ໂປຣເຈັກ'; }));
@@ -888,6 +924,15 @@ subscribe(kind => {
     const t = state.project.tracks;
     t.video = t.video.filter(c => state.media.has(c.mediaId));
     t.audio = t.audio.filter(c => state.media.has(c.mediaId));
+  }
+  // per-line voiceover files no clip uses any more (replaced or deleted)
+  const used = new Set(state.project.tracks.audio.map(c => c.mediaId));
+  for (const m of [...state.media.values()]) {
+    if (m.hidden && !used.has(m.id)) {
+      state.media.delete(m.id);
+      URL.revokeObjectURL(m.url);
+      deleteMedia(m.id);
+    }
   }
   player.resize();
   renderMedia();

@@ -18,7 +18,9 @@ function defaultData() {
       graph_api_version: 'v21.0'
     },
     editor: {
-      openai_api_key: ''
+      openai_api_key: '',
+      azure_speech_key: '',
+      azure_speech_region: ''
     },
     conversations: [],
     messages: [],
