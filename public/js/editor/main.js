@@ -1,13 +1,15 @@
 import {
   state, emit, subscribe, commit, checkpoint, undo, redo, ASPECTS, DEFAULT_TEXT_STYLE,
-  videoLayout, totalDuration, selectedClip, findClip, clipDuration, sortTrack, newId, subDisplay,
+  videoLayout, totalDuration, selectedClip, findClip, clipDuration, clipSpeed, sortTrack, newId, subDisplay, CLIP_DEFAULTS,
   persistMedia, deleteMedia, loadSaved, loadProject, resetProject
 } from './store.js';
-import { Player } from './player.js';
+import { Player, LOOKS } from './player.js';
 import { Timeline, escapeHtml } from './timeline.js';
 import { mixTimelineAudio, transcribe, detectSpeech, alignScript, refineSegments } from './autosub.js';
 import { exportVideo, supportedFormats } from './exporter.js';
 import { initVoiceover } from './voiceover.js';
+import { initVoiceClone } from './voiceclone.js';
+import { allFonts, customFonts, loadCustomFonts, addFontFile, removeFont } from './fonts.js';
 import { LAO_FONTS, normalizeLao, toLaoDigits, toArabicDigits, splitAtFraction, hasThaiScript } from './lao.js';
 import { fmtTime, toSRT, toVTT, parseSubtitles, download, clamp } from './util.js';
 
@@ -244,28 +246,222 @@ const TEXT_PRESETS = [
   { name: 'ພິມດີດ', style: { anim: 'type', bg: true, strokeWidth: 0, bgOpacity: 0.5 } }
 ];
 
-$('#textPresets').innerHTML = TEXT_PRESETS.map((p, i) => {
-  const s = { ...DEFAULT_TEXT_STYLE, ...p.style };
-  const css = `font-family:'${s.font}';font-weight:${s.bold ? 700 : 400};color:${s.color};` +
+function presetCss(style) {
+  const s = { ...DEFAULT_TEXT_STYLE, ...style };
+  return `font-family:'${s.font}';font-weight:${s.bold ? 700 : 400};color:${s.color};` +
     (s.strokeWidth ? `-webkit-text-stroke:1px ${s.stroke};` : '') +
     (s.bg ? `background:${s.bgColor};` : '');
-  return `<button class="preset" data-i="${i}"><span style="${css}">ສະບາຍດີ</span><small>${p.name}</small></button>`;
-}).join('');
+}
 
-$('#textPresets').addEventListener('click', e => {
-  const b = e.target.closest('.preset');
-  if (!b) return;
-  const p = TEXT_PRESETS[b.dataset.i];
+$('#textPresets').innerHTML = TEXT_PRESETS.map((p, i) =>
+  `<button class="preset" data-i="${i}"><span style="${presetCss(p.style)}">ສະບາຍດີ</span><small>${p.name}</small></button>`).join('');
+
+function addTextWithStyle(style) {
   const id = newId();
   commit(pr => {
     pr.tracks.text.push({
       id, start: state.time, end: state.time + 3, text: 'ພິມຂໍ້ຄວາມຂອງທ່ານ',
-      style: { ...DEFAULT_TEXT_STYLE, ...p.style }
+      style: { ...DEFAULT_TEXT_STYLE, ...style }
     });
     sortTrack('text');
   });
   select('text', id);
   setTimeout(() => { const ta = $('#props textarea'); if (ta) { ta.focus(); ta.select(); } }, 0);
+}
+
+// Subtitles keep their own position and line length; the rest of the look is copied.
+function applyStyleToSubs(style, name) {
+  commit(p => {
+    const keep = { y: p.subStyle.y, maxChars: p.subStyle.maxChars, laoDigits: p.subStyle.laoDigits };
+    p.subStyle = { ...p.subStyle, ...style, ...keep };
+  });
+  toast(`ໃຊ້ຮູບແບບ "${name}" ກັບຊັບທັງໝົດແລ້ວ`, 'ok');
+}
+
+$('#textPresets').addEventListener('click', e => {
+  const b = e.target.closest('.preset');
+  if (b) addTextWithStyle(TEXT_PRESETS[b.dataset.i].style);
+});
+
+// ---------------------------------------------------------------- my presets (font preset creator)
+// Saved on the server so they last across browsers; localStorage is the
+// fallback when the editor runs without the server.
+const PRESETS_KEY = 'laocut-text-presets';
+const STYLE_KEYS = Object.keys(DEFAULT_TEXT_STYLE);
+let myPresets = [];
+let draft = { ...DEFAULT_TEXT_STYLE, ...TEXT_PRESETS[1].style };
+let editingPreset = null;
+
+function pickStyle(st) {
+  const out = {};
+  for (const k of STYLE_KEYS) if (st[k] !== undefined) out[k] = st[k];
+  return out;
+}
+
+async function loadPresets() {
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]'); } catch (e) { /* ignore */ }
+  myPresets = local;
+  try {
+    const r = await fetch('/api/editor/text-presets');
+    if (r.ok) {
+      const server = (await r.json()).presets;
+      const ids = new Set(server.map(p => p.id));
+      const onlyLocal = local.filter(p => !ids.has(p.id)); // made while offline
+      myPresets = [...server, ...onlyLocal];
+      if (onlyLocal.length) storePresets();
+    }
+  } catch (e) { /* static page: local only */ }
+  renderMyPresets();
+}
+
+async function storePresets() {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(myPresets)); } catch (e) { /* ignore */ }
+  try {
+    await fetch('/api/editor/text-presets', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ presets: myPresets })
+    });
+  } catch (e) { /* offline */ }
+}
+
+function renderMyPresets() {
+  $('#myPresets').innerHTML = myPresets.length ? myPresets.map((p, i) => `
+    <div class="preset mine" data-i="${i}" title="${escapeHtml(p.name)}">
+      <span style="${presetCss(p.style)}">ສະບາຍດີ</span><small>${escapeHtml(p.name)}</small>
+      <div class="preset-tools">
+        <button data-act="subs" title="ໃຊ້ກັບຊັບທັງໝົດ">CC</button>
+        <button data-act="edit" title="ແກ້ໄຂໃນຕົວສ້າງ">✎</button>
+        <button data-act="del" title="ລຶບ">×</button>
+      </div>
+    </div>`).join('')
+    : '<div class="empty-hint">ຍັງບໍ່ມີ — ອອກແບບໃນ "ສ້າງພຣີເຊັດຟອນ" ແລ້ວກົດບັນທຶກ</div>';
+  renderSubPresetPicker();
+}
+
+$('#myPresets').addEventListener('click', e => {
+  const item = e.target.closest('.preset.mine');
+  if (!item) return;
+  const p = myPresets[item.dataset.i];
+  const act = e.target.dataset.act;
+  if (act === 'del') {
+    if (!confirm(`ລຶບພຣີເຊັດ "${p.name}"?`)) return;
+    myPresets.splice(Number(item.dataset.i), 1);
+    storePresets();
+    renderMyPresets();
+  } else if (act === 'subs') applyStyleToSubs(p.style, p.name);
+  else if (act === 'edit') {
+    draft = { ...DEFAULT_TEXT_STYLE, ...p.style };
+    editingPreset = p.id;
+    $('#presetName').value = p.name;
+    renderCreator();
+    $('#presetName').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else addTextWithStyle(p.style);
+});
+
+function drawPresetPreview() {
+  const cv = $('#presetPreview');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.save();
+  // a narrow virtual frame makes the text big enough to judge the font;
+  // only the middle band of it is shown
+  const W = cv.width, H = 720;
+  ctx.translate(0, -(H - cv.height) / 2);
+  const st = { ...draft, x: 0.5, y: 0.5, anim: 'none' };
+  player.drawText.call({ ctx }, $('#presetSample').value || 'ສະບາຍດີ', st, 1, 3, W, H);
+  ctx.restore();
+}
+
+function renderCreator() {
+  const fields = styleFields(false).filter(f => !['x', 'y'].includes(f.k));
+  // `local`: the draft isn't part of the project, so no undo steps or saves
+  const f = form(fields, draft, () => drawPresetPreview(), { local: true });
+  const box = document.createElement('div');
+  box.innerHTML = f.html;
+  $('#presetForm').replaceChildren(box);
+  f.bind(box);
+  drawPresetPreview();
+}
+
+$('#presetSample').addEventListener('input', drawPresetPreview);
+$('#presetSaveBtn').addEventListener('click', () => {
+  const name = $('#presetName').value.trim();
+  if (!name) { $('#presetName').focus(); return toast('ຕັ້ງຊື່ພຣີເຊັດກ່ອນ', 'warn'); }
+  const existing = myPresets.find(p => p.id === editingPreset) || myPresets.find(p => p.name === name);
+  if (existing) {
+    if (existing.name !== name || existing.id !== editingPreset) {
+      if (!confirm(`ບັນທຶກທັບພຣີເຊັດ "${existing.name}"?`)) return;
+    }
+    existing.name = name;
+    existing.style = pickStyle(draft);
+  } else {
+    myPresets.push({ id: newId(), name, style: pickStyle(draft), createdAt: new Date().toISOString() });
+  }
+  editingPreset = null;
+  $('#presetName').value = '';
+  storePresets();
+  renderMyPresets();
+  toast(`ບັນທຶກພຣີເຊັດ "${name}" ແລ້ວ ✓`, 'ok');
+});
+$('#presetFromSelBtn').addEventListener('click', () => {
+  const sel = state.selection;
+  const c = selectedClip();
+  if (sel && sel.track === 'text' && c) draft = { ...DEFAULT_TEXT_STYLE, ...c.style };
+  else draft = { ...DEFAULT_TEXT_STYLE, ...pickStyle(state.project.subStyle) };
+  editingPreset = null;
+  renderCreator();
+  toast(sel && sel.track === 'text' ? 'ດຶງຮູບແບບຈາກຂໍ້ຄວາມທີ່ເລືອກແລ້ວ' : 'ດຶງຮູບແບບຈາກຊັບໄຕເຕິ້ນແລ້ວ');
+});
+$('#presetAddTextBtn').addEventListener('click', () => addTextWithStyle(pickStyle(draft)));
+$('#presetToSubsBtn').addEventListener('click', () => applyStyleToSubs(pickStyle(draft), $('#presetName').value.trim() || 'ໃໝ່'));
+
+// "Save as preset" from the properties panel
+function saveStyleAsPreset(style) {
+  const name = prompt('ຊື່ພຣີເຊັດ:', '');
+  if (!name || !name.trim()) return;
+  myPresets.push({ id: newId(), name: name.trim().slice(0, 40), style: pickStyle(style), createdAt: new Date().toISOString() });
+  storePresets();
+  renderMyPresets();
+  toast(`ບັນທຶກພຣີເຊັດ "${name.trim()}" ແລ້ວ ✓ (ແຖບ T ຂໍ້ຄວາມ)`, 'ok');
+}
+
+function renderSubPresetPicker() {
+  const sel = $('#props select[data-act=subPreset]');
+  if (sel) sel.innerHTML = subPresetOptions();
+}
+function subPresetOptions() {
+  return '<option value="">ໃຊ້ພຣີເຊັດ...</option>' +
+    TEXT_PRESETS.map((p, i) => `<option value="b${i}">${p.name}</option>`).join('') +
+    myPresets.map((p, i) => `<option value="m${i}">⭐ ${escapeHtml(p.name)}</option>`).join('');
+}
+
+// ---------------------------------------------------------------- my fonts
+function renderFonts() {
+  $('#fontList').innerHTML = customFonts.length ? customFonts.map(f => `
+    <div class="font-item"><span style="font-family:'${f.family}'">${escapeHtml(f.family)} — ສະບາຍດີ Aa</span>
+      <button data-id="${f.id}" title="ລຶບຟອນ">×</button></div>`).join('')
+    : '<div class="hint">ຍັງບໍ່ມີຟອນທີ່ເພີ່ມເອງ</div>';
+}
+$('#fontAddBtn').addEventListener('click', () => $('#fontInput').click());
+$('#fontInput').addEventListener('change', async e => {
+  for (const file of [...e.target.files]) {
+    try {
+      const f = await addFontFile(file);
+      toast(`ເພີ່ມຟອນ "${f.family}" ແລ້ວ ✓`, 'ok');
+    } catch (err) { toast(`${file.name}: ${err.message}`, 'error'); }
+  }
+  e.target.value = '';
+  renderFonts();
+  renderCreator();
+  emit('selection');
+});
+$('#fontList').addEventListener('click', async e => {
+  const id = e.target.dataset.id;
+  if (!id || !confirm('ລຶບຟອນນີ້? ຂໍ້ຄວາມທີ່ໃຊ້ຟອນນີ້ຈະກັບໄປໃຊ້ຟອນພື້ນຖານ')) return;
+  await removeFont(id);
+  renderFonts();
+  renderCreator();
+  emit('selection');
 });
 
 // ---------------------------------------------------------------- selection & properties
@@ -274,12 +470,12 @@ function select(track, id) {
   emit('selection');
 }
 
-const FONT_OPTIONS = LAO_FONTS.map(f => [f.family, f.label]);
+const MOTIONS = [['none', 'ບໍ່ມີ'], ['in', 'ຊູມເຂົ້າຊ້າໆ'], ['out', 'ຊູມອອກຊ້າໆ'], ['left', 'ເລື່ອນໄປຊ້າຍ'], ['right', 'ເລື່ອນໄປຂວາ']];
 const ANIMS = [['none', 'ບໍ່ມີ'], ['fade', 'ຈາງເຂົ້າ-ອອກ'], ['pop', 'ເດັ້ງ'], ['type', 'ພິມດີດ (ທີລະຕົວ)']];
 
 function styleFields(isSub) {
   return [
-    { k: 'font', label: 'ຟອນ', type: 'select', options: FONT_OPTIONS },
+    { k: 'font', label: 'ຟອນ', type: 'select', options: allFonts().map(f => [f.family, f.label]) },
     { k: 'size', label: 'ຂະໜາດ', type: 'range', min: 12, max: 140 },
     { k: 'bold', label: 'ໂຕໜາ', type: 'check' },
     { k: 'color', label: 'ສີຕົວອັກສອນ', type: 'color' },
@@ -323,7 +519,7 @@ function fieldHtml(f, v) {
 }
 
 // Renders a form bound to `target`. Edits apply live; one undo step per field edit.
-function form(fields, target, onChange) {
+function form(fields, target, onChange, { local = false } = {}) {
   const html = fields.map(f => fieldHtml(f, target[f.k])).join('');
   return { html, bind(root) {
     let fresh = true;
@@ -334,18 +530,18 @@ function form(fields, target, onChange) {
       if (!k) return;
       const f = fields.find(x => x.k === k);
       if (!f) return;
-      if (fresh) { checkpoint(); fresh = false; }
+      if (fresh && !local) { checkpoint(); fresh = false; }
       let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       if (f.type === 'range' || f.type === 'number' || f.type === 'time') v = Number(v);
       target[k] = v;
       const out = e.target.parentElement.querySelector('output');
       if (out) out.textContent = f.step && f.step < 1 ? v.toFixed(2) : v;
       onChange && onChange(k, v);
-      emit('edit');
+      if (!local) emit('edit');
     });
     root.addEventListener('change', () => {
       onChange && onChange('change');
-      emit('project');
+      if (!local) emit('project');
     });
   } };
 }
@@ -367,42 +563,106 @@ function renderProps() {
   let title = 'ໂປຣເຈັກ';
   const parts = [];
 
+  const subPresetRow = `<div class="row props-presets"><select data-act="subPreset">${subPresetOptions()}</select>` +
+    `<button data-act="savePreset" data-src="subs" title="ບັນທຶກຮູບແບບຊັບນີ້ເປັນພຣີເຊັດ">💾</button></div>`;
   if (!c) {
-    parts.push(`<div class="props-section"><h4>ຮູບແບບຊັບໄຕເຕິ້ນ (ທຸກແຖວ)</h4>`, form(styleFields(true), state.project.subStyle), `</div>`);
+    parts.push(`<div class="props-section"><h4>ຮູບແບບຊັບໄຕເຕິ້ນ (ທຸກແຖວ)</h4>`, subPresetRow, form(styleFields(true), state.project.subStyle), `</div>`);
   } else if (sel.track === 'video') {
     const m = state.media.get(c.mediaId);
-    title = m && m.type === 'image' ? 'ຮູບພາບ' : 'ຄລິບວິດີໂອ';
-    const fields = [
-      ...(m && m.type === 'image' ? [{ k: 'out', label: 'ໄລຍະເວລາ (ວິນາທີ)', type: 'time' }] : []),
-      ...(m && m.type === 'video' ? [{ k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }] : []),
+    const isImage = m && m.type === 'image';
+    title = isImage ? 'ຮູບພາບ' : 'ຄລິບວິດີໂອ';
+    // older projects: fill in the newer adjustment fields
+    for (const [k, v] of Object.entries(CLIP_DEFAULTS)) if (c[k] === undefined) c[k] = v;
+    const keepRange = k => {
+      if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0);
+      if (k === 'speed' && m && m.type === 'video') c.speed = clamp(c.speed, 0.25, 4);
+    };
+    const basic = [
+      ...(isImage ? [{ k: 'out', label: 'ໄລຍະເວລາ (ວິນາທີ)', type: 'time' }] : []),
+      ...(m && m.type === 'video' ? [
+        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 },
+        { k: 'speed', label: 'ຄວາມໄວ (x)', type: 'range', min: 0.25, max: 4, step: 0.25 }
+      ] : []),
       { k: 'fit', label: 'ການຈັດວາງ', type: 'select', options: [['contain', 'ພໍດີ (ເຫັນທັງໝົດ)'], ['cover', 'ເຕັມຈໍ (ຕັດຂອບ)']] },
       { k: 'bg', label: 'ພື້ນຫຼັງ', type: 'select', options: [['blur', 'ມົວ (ແບບ CapCut)'], ['black', 'ສີດຳ']] }
     ];
-    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)}</div>`,
-      form(fields, c, k => { if (k === 'out' || k === 'change') c.out = Math.max(c.in + 0.1, c.out || 0); }));
+    const color = [
+      { k: 'filter', label: 'ຟິວເຕີສີ', type: 'select', options: Object.entries(LOOKS).map(([k, v]) => [k, v[0]]) },
+      { k: 'brightness', label: 'ຄວາມແຈ້ງ', type: 'range', min: 0.3, max: 2, step: 0.05 },
+      { k: 'contrast', label: 'ຄອນທຣາສ', type: 'range', min: 0.3, max: 2, step: 0.05 },
+      { k: 'saturate', label: 'ຄວາມອີ່ມສີ', type: 'range', min: 0, max: 3, step: 0.05 }
+    ];
+    const transform = [
+      { k: 'zoom', label: 'ຂະຫຍາຍ / ຊູມ', type: 'range', min: 0.3, max: 3, step: 0.05 },
+      { k: 'posX', label: 'ເລື່ອນ ຊ້າຍ-ຂວາ', type: 'range', min: -1, max: 1, step: 0.01 },
+      { k: 'posY', label: 'ເລື່ອນ ເທິງ-ລຸ່ມ', type: 'range', min: -1, max: 1, step: 0.01 },
+      { k: 'rotate', label: 'ໝຸນ (ອົງສາ)', type: 'range', min: -180, max: 180, step: 1 },
+      { k: 'flipH', label: 'ປີ້ນຊ້າຍ-ຂວາ (ກະຈົກ)', type: 'check' },
+      { k: 'motion', label: 'ການເຄື່ອນໄຫວ (Ken Burns)', type: 'select', options: MOTIONS }
+    ];
+    const fades = [
+      { k: 'fadeIn', label: 'ຈາງເຂົ້າ (ວິ)', type: 'range', min: 0, max: 3, step: 0.1 },
+      { k: 'fadeOut', label: 'ຈາງອອກ (ວິ)', type: 'range', min: 0, max: 3, step: 0.1 }
+    ];
+    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ໃຊ້ຊ່ວງ ${fmtTime(c.in)} – ${fmtTime(c.out)} · ຍາວ ${fmtTime(clipDuration(c))}</div>`,
+      form(basic, c, keepRange),
+      `<div class="props-section"><h4>🎨 ປັບສີ</h4>`, form(color, c), `</div>`,
+      `<div class="props-section"><h4>⤢ ຂະໜາດ / ຕຳແໜ່ງ</h4>`, form(transform, c), `</div>`,
+      `<div class="props-section"><h4>◐ ຈາງເຂົ້າ-ອອກ (ພາບ ແລະ ສຽງ)</h4>`, form(fades, c), `</div>`,
+      `<div class="props-section row"><button data-act="resetClip">↺ ລ້າງການປັບແຕ່ງ</button><button data-act="applyAll" title="ໃຊ້ສີ/ຂະໜາດ/ຈາງ ແບບນີ້ກັບທຸກຄລິບໃນແທຣັກຫຼັກ">ໃຊ້ກັບທຸກຄລິບ</button></div>`);
   } else if (sel.track === 'audio') {
     const m = state.media.get(c.mediaId);
-    title = 'ສຽງ / ເພງ';
-    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}</div>`,
+    title = c.tts ? 'ສຽງພາກ' : 'ສຽງ / ເພງ';
+    for (const k of ['speed', 'fadeIn', 'fadeOut']) if (c[k] === undefined) c[k] = CLIP_DEFAULTS[k];
+    const timing = fixTiming('audio', c);
+    parts.push(`<div class="props-info">${escapeHtml(m ? m.name : '')}<br>ຍາວ ${fmtTime(clipDuration(c))}</div>`,
       form([{ k: 'start', label: 'ເລີ່ມທີ່ (ວິນາທີ)', type: 'time' },
-        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 }], c, fixTiming('audio', c)));
+        { k: 'volume', label: 'ລະດັບສຽງ', type: 'range', min: 0, max: 2, step: 0.05 },
+        { k: 'speed', label: 'ຄວາມໄວ (x) — ສຽງບໍ່ປ່ຽນ', type: 'range', min: 0.5, max: 2, step: 0.05 },
+        { k: 'fadeIn', label: 'ຈາງເຂົ້າ (ວິ)', type: 'range', min: 0, max: 5, step: 0.1 },
+        { k: 'fadeOut', label: 'ຈາງອອກ (ວິ)', type: 'range', min: 0, max: 5, step: 0.1 }], c, timing));
   } else if (sel.track === 'text') {
     title = 'ຂໍ້ຄວາມ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
       { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c, fixTiming('text', c)),
-      `<div class="props-section"><h4>ຮູບແບບ</h4>`, form(styleFields(false), c.style), `</div>`);
+      `<div class="props-section"><h4>ຮູບແບບ</h4>`,
+      `<div class="row props-presets"><button data-act="savePreset" data-src="text" class="wide">💾 ບັນທຶກຮູບແບບນີ້ເປັນພຣີເຊັດ</button></div>`,
+      form(styleFields(false), c.style), `</div>`);
   } else if (sel.track === 'subs') {
     title = 'ແຖວຊັບໄຕເຕິ້ນ';
     parts.push(form([{ k: 'text', label: 'ຂໍ້ຄວາມ', type: 'textarea' },
       ...(c.tr ? [{ k: 'tr', label: 'ຄຳແປ (ແຖວທີສອງ)', type: 'textarea' }] : []),
       { k: 'start', label: 'ເລີ່ມ (ວິ)', type: 'time' }, { k: 'end', label: 'ຈົບ (ວິ)', type: 'time' }], c, fixTiming('subs', c)),
-      `<div class="props-section"><h4>ຮູບແບບຊັບ (ໃຊ້ກັບທຸກແຖວ)</h4>`, form(styleFields(true), state.project.subStyle), `</div>`);
+      `<div class="props-section"><h4>ຮູບແບບຊັບ (ໃຊ້ກັບທຸກແຖວ)</h4>`, subPresetRow, form(styleFields(true), state.project.subStyle), `</div>`);
   }
 
   root.innerHTML = `<h3>${title}</h3>` + parts.map(p => typeof p === 'string' ? p : `<div class="form" data-form>${p.html}</div>`).join('');
   const forms = parts.filter(p => typeof p !== 'string');
   $$('[data-form]', root).forEach((el, i) => forms[i].bind(el));
 }
+
+const LOOK_KEYS = ['filter', 'brightness', 'contrast', 'saturate', 'zoom', 'posX', 'posY', 'rotate', 'flipH', 'motion', 'fadeIn', 'fadeOut'];
+$('#props').addEventListener('change', e => {
+  if (e.target.dataset.act !== 'subPreset' || !e.target.value) return;
+  const v = e.target.value;
+  const p = v[0] === 'b' ? TEXT_PRESETS[v.slice(1)] : myPresets[v.slice(1)];
+  if (p) applyStyleToSubs({ ...DEFAULT_TEXT_STYLE, ...p.style }, p.name);
+});
+$('#props').addEventListener('click', e => {
+  const act = e.target.dataset.act;
+  if (act === 'savePreset') {
+    const c = selectedClip();
+    saveStyleAsPreset(e.target.dataset.src === 'text' && c ? c.style : state.project.subStyle);
+    return;
+  }
+  const c = selectedClip();
+  if (!act || !c) return;
+  if (act === 'resetClip') commit(() => { for (const k of LOOK_KEYS) c[k] = CLIP_DEFAULTS[k]; });
+  if (act === 'applyAll') {
+    commit(p => { for (const o of p.tracks.video) if (o !== c) for (const k of LOOK_KEYS) o[k] = c[k]; });
+    toast(`ໃຊ້ການປັບແຕ່ງນີ້ກັບ ${state.project.tracks.video.length} ຄລິບແລ້ວ`, 'ok');
+  }
+});
 
 // ---------------------------------------------------------------- canvas: drag text to move
 canvas.addEventListener('pointerdown', e => {
@@ -448,7 +708,7 @@ function splitTrack(tracks, track, id, t) {
     const idx = videoLayout().findIndex(x => (!id || x.clip.id === id) && t > x.start + MIN && t < x.end - MIN);
     if (idx < 0) return false;
     const c = tracks.video[idx];
-    const cut = c.in + (t - videoLayout()[idx].start);
+    const cut = c.in + (t - videoLayout()[idx].start) * clipSpeed(c);
     tracks.video.splice(idx + 1, 0, { ...c, id: newId(), in: cut });
     c.out = cut;
     return true;
@@ -459,7 +719,7 @@ function splitTrack(tracks, track, id, t) {
   const end = track === 'audio' ? c.start + clipDuration(c) : c.end;
   if (t <= c.start + MIN || t >= end - MIN) return false;
   if (track === 'audio') {
-    const cut = c.in + (t - c.start);
+    const cut = c.in + (t - c.start) * clipSpeed(c);
     list.push({ ...c, id: newId(), start: t, in: cut });
     c.out = cut;
   } else {
@@ -477,6 +737,42 @@ function splitTrack(tracks, track, id, t) {
   }
   list.sort((x, y) => x.start - y.start);
   return true;
+}
+
+// "Delete left/right of the playhead" (CapCut's Q / W): trims the selected
+// clip — or the main-track clip under the playhead — to the playhead.
+function trimToPlayhead(side) {
+  const t = state.time;
+  const MIN = 0.05;
+  let sel = state.selection;
+  if (!sel) {
+    const l = videoLayout().find(x => t > x.start && t < x.end);
+    if (l) sel = { track: 'video', id: l.clip.id };
+  }
+  const c = sel && findClip(sel.track, sel.id);
+  if (!c) { toast('ເລືອກຄລິບ ຫຼື ວາງເສັ້ນເວລາໄວ້ເທິງຄລິບກ່ອນ', 'warn'); return; }
+  const start = sel.track === 'video' ? videoLayout().find(x => x.clip.id === c.id).start : c.start;
+  const end = sel.track === 'video' || sel.track === 'audio' ? start + clipDuration(c) : c.end;
+  if (t <= start + MIN || t >= end - MIN) { toast('ເສັ້ນເວລາຕ້ອງຢູ່ພາຍໃນຄລິບທີ່ເລືອກ', 'warn'); return; }
+  commit(() => {
+    if (sel.track === 'video' || sel.track === 'audio') {
+      const src = c.in + (t - start) * clipSpeed(c);
+      if (side === 'left') { c.in = src; if (sel.track === 'audio') c.start = t; } else c.out = src;
+    } else if (side === 'left') c.start = t;
+    else c.end = t;
+    if (sel.track !== 'video') sortTrack(sel.track);
+  });
+  state.selection = sel;
+  // on the magnetic track the rest slides left: keep the playhead on the cut
+  if (side === 'left' && sel.track === 'video') player.seek(start);
+}
+
+function saveSnapshot() {
+  const prev = player.exporting;
+  player.exporting = true; // no selection outline
+  player.draw(state.time);
+  player.exporting = prev;
+  canvas.toBlob(b => b && download(b, `${state.project.name} ${fmtTime(state.time, 2).replace(':', '-')}.png`), 'image/png');
 }
 
 function deleteSelected() {
@@ -532,6 +828,9 @@ async function refreshStatus() {
     aiStatus = s;
     aiReady = s.whisper;
     voiceover.renderStatus();
+    voiceclone.renderStatus();
+    $('#elevenKeyInput').value = s.elevenKey || '';
+    $('#elevenKeyInput').disabled = s.elevenFromEnv;
     $('#azureKeyInput').value = s.azureKey || '';
     $('#azureKeyInput').disabled = s.azureFromEnv;
     $('#azureRegionInput').value = s.azureRegion || '';
@@ -548,6 +847,7 @@ async function refreshStatus() {
     const msg = '<span class="dot"></span> ບໍ່ໄດ້ເຊື່ອມຕໍ່ເຊີບເວີ — ຟັງຊັນ AI ໃຊ້ບໍ່ໄດ້, ການຕັດຕໍ່ອື່ນໆໃຊ້ໄດ້ປົກກະຕິ';
     $('#aiStatus').innerHTML = msg;
     $('#ttsStatus').innerHTML = msg;
+    voiceclone.renderStatus();
   }
 }
 
@@ -790,10 +1090,11 @@ $('#saveSettingsBtn').addEventListener('click', async () => {
     body: JSON.stringify({
       openai_api_key: $('#apiKeyInput').value,
       azure_speech_key: $('#azureKeyInput').value,
-      azure_speech_region: $('#azureRegionInput').value
+      azure_speech_region: $('#azureRegionInput').value,
+      elevenlabs_api_key: $('#elevenKeyInput').value
     })
   });
-  if (r.ok) { toast('ບັນທຶກແລ້ວ', 'ok'); closeModal('settingsModal'); refreshStatus(); }
+  if (r.ok) { toast('ບັນທຶກແລ້ວ', 'ok'); closeModal('settingsModal'); await refreshStatus(); voiceclone.refresh(); }
   else toast((await r.json().catch(() => ({}))).error || 'ບັນທຶກບໍ່ສຳເລັດ', 'error');
 });
 
@@ -839,6 +1140,12 @@ const voiceover = initVoiceover({
   getStatus: () => aiStatus
 });
 
+const voiceclone = initVoiceClone({
+  $, toast, busy, openModal, createMedia, adoptMedia,
+  getStatus: () => aiStatus,
+  onVoicesChanged: list => voiceover.setCloneVoices(list)
+});
+
 // ---------------------------------------------------------------- top bar & transport
 $('#projectName').addEventListener('change', e => commit(p => { p.name = e.target.value.trim() || 'ໂປຣເຈັກ'; }));
 $('#aspectSelect').addEventListener('change', e => { commit(p => { p.aspect = e.target.value; }); player.resize(); });
@@ -854,6 +1161,9 @@ $('#splitBtn').addEventListener('click', splitAtPlayhead);
 $('#deleteBtn').addEventListener('click', deleteSelected);
 $('#dupBtn').addEventListener('click', duplicateSelected);
 $('#addSubBtn').addEventListener('click', addSubtitleAtPlayhead);
+$('#trimLeftBtn').addEventListener('click', () => trimToPlayhead('left'));
+$('#trimRightBtn').addEventListener('click', () => trimToPlayhead('right'));
+$('#snapshotBtn').addEventListener('click', saveSnapshot);
 $('#zoomRange').addEventListener('input', e => { state.zoom = Number(e.target.value); emit('zoom'); });
 
 $$('.tabs button').forEach(b => b.addEventListener('click', () => {
@@ -880,6 +1190,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Home') player.seek(0);
   else if (e.key === 'End') player.seek(totalDuration());
   else if (e.key.toLowerCase() === 't' && !mod) addSubtitleAtPlayhead();
+  else if (e.key.toLowerCase() === 'q' && !mod) trimToPlayhead('left');
+  else if (e.key.toLowerCase() === 'w' && !mod) trimToPlayhead('right');
   else if (e.key === '+' || e.key === '=') { state.zoom = clamp(state.zoom * 1.25, 4, 400); emit('zoom'); }
   else if (e.key === '-') { state.zoom = clamp(state.zoom / 1.25, 4, 400); emit('zoom'); }
 });
@@ -914,6 +1226,10 @@ subscribe(kind => {
   if (document.fonts) {
     Promise.all(LAO_FONTS.flatMap(f => [document.fonts.load(`400 40px "${f.family}"`, 'ລາວ'), document.fonts.load(`700 40px "${f.family}"`, 'ລາວ')])).catch(() => {});
   }
+  await loadCustomFonts();
+  renderFonts();
+  renderCreator();
+  loadPresets();
   if (!('Segmenter' in Intl)) toast('ເບົາເຊີນີ້ບໍ່ຮອງຮັບການຕັດຄຳລາວ — ແນະນຳ Chrome/Edge ລຸ້ນໃໝ່', 'warn');
 
   const saved = await loadSaved();

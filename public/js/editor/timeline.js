@@ -1,6 +1,6 @@
 // Multi-track timeline: text, subtitles, main video (magnetic) and audio.
 // Drag a clip to move it, drag its edges to trim, click the ruler to seek.
-import { state, emit, checkpoint, videoLayout, totalDuration, findClip, clipDuration, sortTrack } from './store.js';
+import { state, emit, checkpoint, videoLayout, totalDuration, findClip, clipDuration, clipSpeed, sortTrack } from './store.js';
 import { fmtTime, clamp } from './util.js';
 
 export const TRACKS = [
@@ -62,7 +62,9 @@ export class Timeline {
     this.rows.video.innerHTML = videoLayout().map(l => {
       const m = state.media.get(l.clip.mediaId);
       const bg = m && m.thumb ? `background-image:url(${m.thumb});` : '';
-      return mk('video', l.clip, l.start, l.end, `${m ? m.name : '?'} · ${fmtTime(l.end - l.start)}`, bg);
+      const sp = clipSpeed(l.clip);
+      const fx = (l.clip.filter && l.clip.filter !== 'none') || l.clip.fadeIn || l.clip.fadeOut ? ' ✦' : '';
+      return mk('video', l.clip, l.start, l.end, `${m ? m.name : '?'} · ${fmtTime(l.end - l.start)}${sp !== 1 ? ` · ${sp}x` : ''}${fx}`, bg);
     }).join('') || `<div class="tl-empty">ລາກວິດີໂອ ຫຼື ຮູບ ມາວາງບ່ອນນີ້</div>`;
 
     // overlapping audio (music + voiceover) stacks into lanes
@@ -74,7 +76,16 @@ export class Timeline {
     this.rows.audio.innerHTML = state.project.tracks.audio.map(c => {
       const m = state.media.get(c.mediaId);
       const pos = count > 1 ? `top:${4 + lane.get(c.id) * laneH}px;bottom:auto;height:${laneH - 4}px;` : '';
-      return mk('audio', c, c.start, c.start + clipDuration(c), m ? m.name : '?', pos);
+      const sp = clipSpeed(c);
+      let wave = '';
+      const url = m && this.waveform(m);
+      if (url) {
+        // the image covers the whole file; shift it so the trimmed part shows
+        wave = `background-image:url(${url});background-size:${this.px(m.duration / sp)}px 100%;` +
+          `background-position:${-this.px(c.in / sp)}px 0;background-repeat:no-repeat;`;
+      }
+      const label = (m ? m.name : '?') + (sp !== 1 ? ` · ${sp}x` : '');
+      return mk('audio', c, c.start, c.start + clipDuration(c), label, pos + wave);
     }).join('');
     this.rows.text.innerHTML = state.project.tracks.text.map(c => mk('text', c, c.start, c.end, c.text)).join('');
     this.rows.subs.innerHTML = state.project.tracks.subs.map(c => mk('subs', c, c.start, c.end, c.text)).join('');
@@ -101,6 +112,19 @@ export class Timeline {
       const { scrollLeft, clientWidth } = this.scroll;
       if (x > scrollLeft + clientWidth - 40 || x < scrollLeft) this.scroll.scrollLeft = x - 80;
     }
+  }
+
+  // Waveform image of an audio file (whole length), built once in the
+  // background; the timeline redraws when it is ready.
+  waveform(m) {
+    if (waves.has(m.id)) return waves.get(m.id);
+    waves.set(m.id, null);
+    buildWaveform(m).then(url => {
+      if (!url) return;
+      waves.set(m.id, url);
+      this.render();
+    });
+    return null;
   }
 
   snapPoints(exclude) {
@@ -191,6 +215,7 @@ export class Timeline {
     const media = state.media.get(c.mediaId);
     const maxSrc = media && media.type !== 'image' ? media.duration : Infinity;
     const pts = this.snapPoints(id);
+    const sp = clipSpeed(c);  // timeline seconds × sp = source seconds
     let changed = false;
     const origStart = track === 'video' ? videoLayout().find(l => l.clip.id === id).start : c.start;
 
@@ -205,23 +230,23 @@ export class Timeline {
           clipEl.classList.add('dragging');
           return;
         }
-        if (mode === 'trimL') c.in = clamp(orig.in + dt, 0, orig.out - MIN_LEN);
-        else c.out = clamp(orig.out + dt, orig.in + MIN_LEN, maxSrc);
+        if (mode === 'trimL') c.in = clamp(orig.in + dt * sp, 0, orig.out - MIN_LEN * sp);
+        else c.out = clamp(orig.out + dt * sp, orig.in + MIN_LEN * sp, maxSrc);
       } else if (track === 'audio') {
-        const len = orig.out - orig.in;
+        const len = (orig.out - orig.in) / sp;
         if (mode === 'move') {
           let s = Math.max(0, orig.start + dt);
           const se = this.snap(s + len, pts) - len;
           s = Math.abs(se - s) < Math.abs(this.snap(s, pts) - s) ? se : this.snap(s, pts);
           c.start = Math.max(0, s);
         } else if (mode === 'trimL') {
-          const d = clamp(dt, -orig.in, len - MIN_LEN);
+          const d = clamp(dt, -orig.in / sp, len - MIN_LEN);
           const ns = this.snap(orig.start + d, pts);
-          const dd = clamp(ns - orig.start, -orig.in, len - MIN_LEN);
-          c.in = orig.in + dd; c.start = orig.start + dd;
+          const dd = clamp(ns - orig.start, -orig.in / sp, len - MIN_LEN);
+          c.in = orig.in + dd * sp; c.start = orig.start + dd;
         } else {
           const ne = this.snap(orig.start + len + dt, pts);
-          c.out = clamp(orig.in + (ne - orig.start), orig.in + MIN_LEN, maxSrc);
+          c.out = clamp(orig.in + (ne - orig.start) * sp, orig.in + MIN_LEN * sp, maxSrc);
         }
       } else {
         const len = orig.end - orig.start;
@@ -266,6 +291,41 @@ export class Timeline {
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+  }
+}
+
+const waves = new Map(); // mediaId → object URL of the waveform image
+
+async function buildWaveform(m) {
+  if (!m.blob || !(m.duration > 0) || typeof OfflineAudioContext === 'undefined') return null;
+  try {
+    const ctx = new OfflineAudioContext(1, 1, 22050);
+    const buf = await ctx.decodeAudioData(await m.blob.arrayBuffer());
+    const W = Math.round(Math.min(6000, Math.max(200, m.duration * 60)));
+    const H = 48;
+    const data = buf.getChannelData(0);
+    const step = data.length / W;
+    const peaks = new Float32Array(W);
+    let max = 0;
+    for (let x = 0; x < W; x++) {
+      let p = 0;
+      const a = Math.floor(x * step), b = Math.min(data.length, Math.floor((x + 1) * step));
+      for (let i = a; i < b; i += 4) { const v = Math.abs(data[i]); if (v > p) p = v; }
+      peaks[x] = p;
+      if (p > max) max = p;
+    }
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = 'rgba(220, 252, 231, 0.55)';
+    for (let x = 0; x < W; x++) {
+      const h = Math.max(1, (peaks[x] / (max || 1)) * (H - 4));
+      g.fillRect(x, (H - h) / 2, 1, h);
+    }
+    const blob = await new Promise(r => cv.toBlob(r));
+    return blob ? URL.createObjectURL(blob) : null;
+  } catch (e) {
+    return null;
   }
 }
 
