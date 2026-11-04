@@ -111,18 +111,27 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
 
   const KEY_NAMES = { azure: 'Azure Speech Key', openai: 'OpenAI API Key', clone: 'ElevenLabs API Key' };
 
+  let cloneProviders = {};
+
+  function cloneReady() {
+    const s = getStatus();
+    return cloneProviders[voiceSel.value] === 'local' ? s.local : s.eleven;
+  }
+
   function ready() {
     const s = getStatus();
-    if (engineSel.value === 'clone') return Boolean(s.eleven && voiceSel.value);
+    if (engineSel.value === 'clone') return Boolean(voiceSel.value && cloneReady());
     return engineSel.value === 'azure' ? s.azure : s.whisper;
   }
 
   function renderStatus() {
     const ok = ready();
-    const noVoice = engineSel.value === 'clone' && getStatus().eleven && !voiceSel.value;
+    const noVoice = engineSel.value === 'clone' && !voiceSel.value;
+    const noLocal = engineSel.value === 'clone' && cloneProviders[voiceSel.value] === 'local' && !getStatus().local;
     $('#ttsStatus').innerHTML = ok
       ? '<span class="dot ok"></span> ພ້ອມໃຊ້ງານ'
       : noVoice ? '<span class="dot"></span> ຍັງບໍ່ມີສຽງໂຄລນ — ສ້າງໃນແຖບ 🧬 ສຽງໂຄລນ'
+      : noLocal ? '<span class="dot"></span> ເຊີບເວີສຽງຟຣີຍັງບໍ່ເປີດ — ເປີດ voice-server/start.bat ແລ້ວໂຫຼດໜ້ານີ້ໃໝ່'
       : `<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ ${KEY_NAMES[engineSel.value]} — <a href="#" data-open-settings>ຕັ້ງຄ່າ</a>`;
     const link = $('#ttsStatus [data-open-settings]');
     if (link) link.onclick = e => { e.preventDefault(); openModal('settingsModal'); };
@@ -146,9 +155,11 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
   }
 
   function notReady() {
-    if (engineSel.value === 'clone' && getStatus().eleven) {
+    if (engineSel.value === 'clone' && !voiceSel.value) {
       toast('ສ້າງພຣີເຊັດສຽງໃນແຖບ 🧬 ສຽງໂຄລນ ກ່ອນ', 'warn');
       document.querySelector('[data-tab=clone]').click();
+    } else if (engineSel.value === 'clone' && cloneProviders[voiceSel.value] === 'local') {
+      toast('ເປີດເຊີບເວີສຽງຟຣີກ່ອນ (voice-server/start.bat ຫຼື start.sh)', 'warn');
     } else openModal('settingsModal');
   }
 
@@ -231,7 +242,8 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
 
   // cloned voices come and go while the editor is open
   function setCloneVoices(list) {
-    VOICES.clone = list.map(v => [v.id, `🧬 ${v.name}`]);
+    VOICES.clone = list.map(v => [v.id, `${v.provider === 'local' ? '💻' : '🧬'} ${v.name}`]);
+    cloneProviders = Object.fromEntries(list.map(v => [v.id, v.provider]));
     if (engineSel.value === 'clone') renderVoices();
   }
 

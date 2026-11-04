@@ -22,6 +22,7 @@ function defaultData() {
       azure_speech_key: '',
       azure_speech_region: '',
       elevenlabs_api_key: '',
+      local_voice_url: '',
       voices: [],       // cloned voice presets (see routes/editor.js)
       textPresets: []   // saved text/subtitle style presets
     },

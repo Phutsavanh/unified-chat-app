@@ -830,6 +830,7 @@ async function refreshStatus() {
     voiceover.renderStatus();
     voiceclone.renderStatus();
     $('#elevenKeyInput').value = s.elevenKey || '';
+    $('#localUrlInput').value = s.localUrl || '';
     $('#elevenKeyInput').disabled = s.elevenFromEnv;
     $('#azureKeyInput').value = s.azureKey || '';
     $('#azureKeyInput').disabled = s.azureFromEnv;
@@ -1091,7 +1092,8 @@ $('#saveSettingsBtn').addEventListener('click', async () => {
       openai_api_key: $('#apiKeyInput').value,
       azure_speech_key: $('#azureKeyInput').value,
       azure_speech_region: $('#azureRegionInput').value,
-      elevenlabs_api_key: $('#elevenKeyInput').value
+      elevenlabs_api_key: $('#elevenKeyInput').value,
+      local_voice_url: $('#localUrlInput').value.trim()
     })
   });
   if (r.ok) { toast('ບັນທຶກແລ້ວ', 'ok'); closeModal('settingsModal'); await refreshStatus(); voiceclone.refresh(); }
@@ -1143,6 +1145,7 @@ const voiceover = initVoiceover({
 const voiceclone = initVoiceClone({
   $, toast, busy, openModal, createMedia, adoptMedia,
   getStatus: () => aiStatus,
+  refreshStatus: () => refreshStatus(),
   onVoicesChanged: list => voiceover.setCloneVoices(list)
 });
 
