@@ -1,7 +1,7 @@
 // Preview engine: one hidden <video>/<audio> element per media file, kept in
 // sync with the timeline clock and composited onto a canvas together with
 // text overlays and subtitles. The same canvas is recorded for export.
-import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay } from './store.js';
+import { state, ASPECTS, videoLayout, totalDuration, emit, subDisplay, clipSpeed, clipDuration, fadeFactor } from './store.js';
 import { wrapText, graphemes, toLaoDigits } from './lao.js';
 import { hexToRgba } from './util.js';
 
@@ -127,10 +127,11 @@ export class Player {
   sync() {
     const t = state.time;
     const active = new Set();
-    const play = (mediaId, el, srcTime, vol) => {
+    const play = (mediaId, el, srcTime, vol, rate = 1) => {
       active.add(mediaId);
       if (!(el instanceof HTMLMediaElement) || el.readyState === 0) return;
       this.setVolume(mediaId, el, vol);
+      if (el.playbackRate !== rate) el.playbackRate = rate;
       if (state.playing) {
         if (Math.abs(el.currentTime - srcTime) > 0.3) el.currentTime = srcTime;
         if (el.paused) el.play().catch(() => {});
@@ -142,13 +143,17 @@ export class Player {
 
     for (const l of videoLayout()) {
       if (t >= l.start && t < l.end) {
-        const m = state.media.get(l.clip.mediaId);
-        if (m && m.type === 'video') play(m.id, this.element(m), l.clip.in + (t - l.start), l.clip.volume ?? 1);
+        const c = l.clip;
+        const m = state.media.get(c.mediaId);
+        const sp = clipSpeed(c);
+        const vol = (c.volume ?? 1) * fadeFactor(t - l.start, l.end - l.start, c.fadeIn, c.fadeOut);
+        if (m && m.type === 'video') play(m.id, this.element(m), c.in + (t - l.start) * sp, vol, sp);
         break;
       }
     }
     for (const c of state.project.tracks.audio) {
-      const d = c.out - c.in;
+      const d = clipDuration(c);
+      const sp = clipSpeed(c);
       // load upcoming clips early (voiceover lines are many short files)
       if (state.playing && c.start > t && c.start - t < 1.5) {
         const m = state.media.get(c.mediaId);
@@ -156,7 +161,8 @@ export class Player {
       }
       if (t >= c.start && t < c.start + d) {
         const m = state.media.get(c.mediaId);
-        if (m) play(m.id, this.element(m), c.in + (t - c.start), c.volume ?? 1);
+        const vol = (c.volume ?? 1) * fadeFactor(t - c.start, d, c.fadeIn, c.fadeOut);
+        if (m) play(m.id, this.element(m), c.in + (t - c.start) * sp, vol, sp);
       }
     }
     for (const [id, el] of this.els) {
@@ -178,7 +184,13 @@ export class Player {
       if (m) {
         const el = this.element(m);
         const ready = m.type === 'image' ? el.complete && el.naturalWidth : el.readyState >= 2;
-        if (ready) this.drawMedia(el, m, cur.clip, W, H);
+        const local = t - cur.start, dur = cur.end - cur.start;
+        if (ready) {
+          // fades go to/from black
+          ctx.globalAlpha = fadeFactor(local, dur, cur.clip.fadeIn, cur.clip.fadeOut);
+          this.drawMedia(el, m, cur.clip, W, H, local / Math.max(0.001, dur));
+          ctx.globalAlpha = 1;
+        }
       }
     }
 
@@ -211,23 +223,41 @@ export class Player {
     ctx.restore();
   }
 
-  drawMedia(el, m, clip, W, H) {
+  // `p` = progress through the clip (0..1), for the motion effects
+  drawMedia(el, m, clip, W, H, p = 0) {
     const { ctx } = this;
     const sw = m.type === 'image' ? el.naturalWidth : el.videoWidth;
     const sh = m.type === 'image' ? el.naturalHeight : el.videoHeight;
     if (!sw || !sh) return;
     const contain = Math.min(W / sw, H / sh);
     const cover = Math.max(W / sw, H / sh);
-    if ((clip.fit || 'contain') === 'contain' && clip.bg === 'blur' && 'filter' in ctx) {
+    const look = clipFilter(clip);
+    const canFilter = 'filter' in ctx;
+    if ((clip.fit || 'contain') === 'contain' && clip.bg === 'blur' && canFilter) {
       ctx.save();
-      ctx.filter = `blur(${Math.round(W / 40)}px) brightness(0.7)`;
+      ctx.filter = `blur(${Math.round(W / 40)}px) brightness(0.7) ${look}`;
       const dw = sw * cover * 1.1, dh = sh * cover * 1.1;
       ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
       ctx.restore();
     }
-    const k = (clip.fit === 'cover') ? cover : contain;
+    // Ken Burns style motion: slow zoom or pan across the clip
+    const e = p * p * (3 - 2 * p); // ease in-out
+    let mz = 1, mx = 0;
+    if (clip.motion === 'in') mz = 1 + 0.15 * e;
+    if (clip.motion === 'out') mz = 1.15 - 0.15 * e;
+    if (clip.motion === 'left' || clip.motion === 'right') {
+      mz = 1.15;
+      mx = (clip.motion === 'left' ? 1 - 2 * e : 2 * e - 1) * 0.06 * W;
+    }
+    const k = ((clip.fit === 'cover') ? cover : contain) * (clip.zoom || 1) * mz;
     const dw = sw * k, dh = sh * k;
-    ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    ctx.save();
+    ctx.translate(W / 2 + (clip.posX || 0) * W / 2 + mx, H / 2 + (clip.posY || 0) * H / 2);
+    if (clip.rotate) ctx.rotate(clip.rotate * Math.PI / 180);
+    if (clip.flipH) ctx.scale(-1, 1);
+    if (look && canFilter) ctx.filter = look;
+    ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
   }
 
   // Draws a wrapped, Lao-aware text block. Returns its bounding box.
@@ -310,6 +340,29 @@ export class Player {
     }
     return null;
   }
+}
+
+// Colour looks, applied with the canvas 2D filter (same syntax as CSS).
+export const LOOKS = {
+  none: ['ບໍ່ມີ', ''],
+  vivid: ['ສົດໃສ', 'saturate(1.6) contrast(1.1)'],
+  warm: ['ອົບອຸ່ນ', 'sepia(0.3) saturate(1.3) hue-rotate(-10deg)'],
+  cool: ['ເຢັນ', 'saturate(1.1) hue-rotate(15deg) brightness(1.03)'],
+  vintage: ['ວິນເທດ', 'sepia(0.45) contrast(0.9) brightness(1.05) saturate(0.8)'],
+  matte: ['ມັດ (ຈາງ)', 'contrast(0.85) brightness(1.1) saturate(0.85)'],
+  drama: ['ດຣາມ່າ', 'contrast(1.35) saturate(0.9) brightness(0.95)'],
+  bw: ['ຂາວ-ດຳ', 'grayscale(1)'],
+  sepia: ['ສີນ້ຳຕານເກົ່າ', 'sepia(0.85)']
+};
+
+export function clipFilter(c) {
+  const parts = [];
+  const look = LOOKS[c.filter];
+  if (look && look[1]) parts.push(look[1]);
+  if (c.brightness != null && c.brightness !== 1) parts.push(`brightness(${c.brightness})`);
+  if (c.contrast != null && c.contrast !== 1) parts.push(`contrast(${c.contrast})`);
+  if (c.saturate != null && c.saturate !== 1) parts.push(`saturate(${c.saturate})`);
+  return parts.join(' ');
 }
 
 function roundRect(ctx, x, y, w, h, r) {

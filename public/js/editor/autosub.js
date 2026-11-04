@@ -5,7 +5,7 @@
 //  2b. Offline: detect speech regions from loudness and either create empty
 //      subtitle slots or spread a pasted Lao script across them.
 //  3. Split long lines at Lao word boundaries and clean up common Lao encoding issues.
-import { state, videoLayout, totalDuration } from './store.js';
+import { state, videoLayout, totalDuration, clipSpeed } from './store.js';
 import { encodeWav } from './util.js';
 import { splitPhrases, graphemeLength, normalizeLao } from './lao.js';
 
@@ -43,6 +43,8 @@ export async function mixTimelineAudio({ includeMusic = false, onProgress = () =
     any = true;
     const src = ctx.createBufferSource();
     src.buffer = buf;
+    // (pitch shifts with speed here; fine for speech detection/transcription)
+    src.playbackRate.value = clipSpeed(j.clip);
     const g = ctx.createGain();
     g.gain.value = Math.min(2, j.clip.volume ?? 1) || 0;
     src.connect(g).connect(ctx.destination);

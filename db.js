@@ -20,7 +20,10 @@ function defaultData() {
     editor: {
       openai_api_key: '',
       azure_speech_key: '',
-      azure_speech_region: ''
+      azure_speech_region: '',
+      elevenlabs_api_key: '',
+      voices: [],       // cloned voice presets (see routes/editor.js)
+      textPresets: []   // saved text/subtitle style presets
     },
     conversations: [],
     messages: [],
@@ -48,8 +51,10 @@ function load() {
   for (const key of Object.keys(defaults)) {
     if (!(key in cache)) cache[key] = defaults[key];
   }
-  for (const key of Object.keys(defaults.settings)) {
-    if (!(key in cache.settings)) cache.settings[key] = defaults.settings[key];
+  for (const group of ['settings', 'editor']) {
+    for (const key of Object.keys(defaults[group])) {
+      if (!(key in cache[group])) cache[group][key] = defaults[group][key];
+    }
   }
   return cache;
 }

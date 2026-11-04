@@ -113,7 +113,25 @@ export function selectedClip() {
   return state.selection ? findClip(state.selection.track, state.selection.id) : null;
 }
 
-export function clipDuration(c) { return c.out - c.in; }
+// Media clips play their source range [in, out] at `speed` (1 = normal), so
+// they take (out - in) / speed seconds of timeline.
+export function clipSpeed(c) { return c.speed > 0 ? c.speed : 1; }
+export function clipDuration(c) { return (c.out - c.in) / clipSpeed(c); }
+
+// Picture and sound adjustments a video/image clip can carry.
+export const CLIP_DEFAULTS = {
+  speed: 1, filter: 'none', brightness: 1, contrast: 1, saturate: 1,
+  zoom: 1, posX: 0, posY: 0, rotate: 0, flipH: false, motion: 'none',
+  fadeIn: 0, fadeOut: 0
+};
+
+// 0..1 gain/opacity for fades at the start and end of a clip
+export function fadeFactor(local, dur, fadeIn = 0, fadeOut = 0) {
+  let f = 1;
+  if (fadeIn > 0) f = Math.min(f, local / fadeIn);
+  if (fadeOut > 0) f = Math.min(f, (dur - local) / fadeOut);
+  return Math.max(0, Math.min(1, f));
+}
 
 // The main video track is magnetic (no gaps), like CapCut: start times are
 // derived from order.

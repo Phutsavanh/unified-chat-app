@@ -3,6 +3,7 @@
 // at its own start time and speeds a line up when it would run into the next.
 import { state, commit, newId, sortTrack } from './store.js';
 import { normalizeLao } from './lao.js';
+import { escapeHtml } from './timeline.js';
 
 export const VOICES = {
   azure: [
@@ -17,7 +18,8 @@ export const VOICES = {
     ['nova', 'Nova — ຍິງ'], ['shimmer', 'Shimmer — ຍິງ'], ['coral', 'Coral — ຍິງ'],
     ['alloy', 'Alloy — ກາງ'], ['sage', 'Sage — ກາງ'],
     ['onyx', 'Onyx — ຊາຍ'], ['echo', 'Echo — ຊາຍ'], ['ash', 'Ash — ຊາຍ'], ['fable', 'Fable — ຊາຍ']
-  ]
+  ],
+  clone: [] // filled from the cloned-voice presets (voiceclone.js)
 };
 
 const PARALLEL = 3;
@@ -97,21 +99,31 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
   });
 
   function renderVoices() {
-    voiceSel.innerHTML = VOICES[engineSel.value].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    const keep = voiceSel.value;
+    const list = VOICES[engineSel.value];
+    voiceSel.innerHTML = list.length
+      ? list.map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join('')
+      : '<option value="">— ສ້າງສຽງໃນແຖບ 🧬 ສຽງໂຄລນ ກ່ອນ —</option>';
+    if (list.some(([v]) => v === keep)) voiceSel.value = keep;
     $('#ttsPitchWrap').hidden = engineSel.value !== 'azure';
     renderStatus();
   }
 
+  const KEY_NAMES = { azure: 'Azure Speech Key', openai: 'OpenAI API Key', clone: 'ElevenLabs API Key' };
+
   function ready() {
     const s = getStatus();
+    if (engineSel.value === 'clone') return Boolean(s.eleven && voiceSel.value);
     return engineSel.value === 'azure' ? s.azure : s.whisper;
   }
 
   function renderStatus() {
     const ok = ready();
+    const noVoice = engineSel.value === 'clone' && getStatus().eleven && !voiceSel.value;
     $('#ttsStatus').innerHTML = ok
       ? '<span class="dot ok"></span> ພ້ອມໃຊ້ງານ'
-      : `<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ ${engineSel.value === 'azure' ? 'Azure Speech Key' : 'OpenAI API Key'} — <a href="#" data-open-settings>ຕັ້ງຄ່າ</a>`;
+      : noVoice ? '<span class="dot"></span> ຍັງບໍ່ມີສຽງໂຄລນ — ສ້າງໃນແຖບ 🧬 ສຽງໂຄລນ'
+      : `<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ ${KEY_NAMES[engineSel.value]} — <a href="#" data-open-settings>ຕັ້ງຄ່າ</a>`;
     const link = $('#ttsStatus [data-open-settings]');
     if (link) link.onclick = e => { e.preventDefault(); openModal('settingsModal'); };
   }
@@ -133,7 +145,15 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
     return blob;
   }
 
+  function notReady() {
+    if (engineSel.value === 'clone' && getStatus().eleven) {
+      toast('ສ້າງພຣີເຊັດສຽງໃນແຖບ 🧬 ສຽງໂຄລນ ກ່ອນ', 'warn');
+      document.querySelector('[data-tab=clone]').click();
+    } else openModal('settingsModal');
+  }
+
   engineSel.addEventListener('change', renderVoices);
+  voiceSel.addEventListener('change', renderStatus);
   for (const id of ['ttsRate', 'ttsPitch']) {
     $(`#${id}`).addEventListener('input', e => { $(`#${id}Out`).textContent = `${e.target.value > 0 ? '+' : ''}${e.target.value}%`; });
   }
@@ -141,7 +161,7 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
   $('#ttsPreviewBtn').addEventListener('click', async () => {
     const text = $('#ttsText').value.trim();
     if (!text) return toast('ພິມຂໍ້ຄວາມກ່ອນ', 'warn');
-    if (!ready()) return openModal('settingsModal');
+    if (!ready()) return notReady();
     checkLanguage(text);
     try {
       busy('ກຳລັງສ້າງສຽງ...', 0.5);
@@ -159,7 +179,7 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
   $('#ttsAddBtn').addEventListener('click', async () => {
     const text = $('#ttsText').value.trim();
     if (!text) return toast('ພິມຂໍ້ຄວາມກ່ອນ', 'warn');
-    if (!ready()) return openModal('settingsModal');
+    if (!ready()) return notReady();
     checkLanguage(text);
     try {
       busy('ກຳລັງສ້າງສຽງ...', 0.5);
@@ -178,7 +198,7 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
   });
 
   $('#ttsSubsBtn').addEventListener('click', async () => {
-    if (!ready()) return openModal('settingsModal');
+    if (!ready()) return notReady();
     const o = { ...opts(), useTr: $('#ttsUseTr').checked, fit: $('#ttsFit').checked };
     const sample = state.project.tracks.subs.map(s => (o.useTr ? s.tr : s.text) || '').join(' ');
     if (sample.trim()) checkLanguage(sample);
@@ -209,6 +229,12 @@ export function initVoiceover({ $, toast, busy, openModal, getStatus, createMedi
     }
   });
 
+  // cloned voices come and go while the editor is open
+  function setCloneVoices(list) {
+    VOICES.clone = list.map(v => [v.id, `🧬 ${v.name}`]);
+    if (engineSel.value === 'clone') renderVoices();
+  }
+
   renderVoices();
-  return { renderStatus };
+  return { renderStatus, setCloneVoices };
 }

@@ -35,6 +35,7 @@
       <button data-tab="text">T ຂໍ້ຄວາມ</button>
       <button data-tab="auto">✨ ຊັບອັດຕະໂນມັດ</button>
       <button data-tab="voice">🎙 ສຽງພາກ</button>
+      <button data-tab="clone">🧬 ສຽງໂຄລນ</button>
       <button data-tab="subs">CC ລາຍການຊັບ <span id="subCount" class="badge">0</span></button>
     </nav>
 
@@ -50,8 +51,34 @@
     <section class="tab-panel" id="tab-text" hidden>
       <h4>ເລືອກຮູບແບບຂໍ້ຄວາມ</h4>
       <div id="textPresets" class="presets"></div>
-      <p class="hint">ຂໍ້ຄວາມຈະຖືກເພີ່ມທີ່ເສັ້ນເວລາ. ລາກຂໍ້ຄວາມໃນຈໍເພື່ອຍ້າຍຕຳແໜ່ງ.<br>
-        ຮອງຮັບຟອນລາວ 4 ແບບ ແລະ ຕັດແຖວຕາມຄຳລາວອັດຕະໂນມັດ.</p>
+      <h4 class="mt">⭐ ພຣີເຊັດຂອງຂ້ອຍ</h4>
+      <div id="myPresets" class="presets"></div>
+      <p class="hint">ກົດເພື່ອເພີ່ມຂໍ້ຄວາມ · <b>CC</b> = ໃຊ້ກັບຊັບໄຕເຕິ້ນທັງໝົດ · ✎ = ແກ້ໄຂ · × = ລຶບ</p>
+
+      <div class="card">
+        <h4>🎨 ສ້າງພຣີເຊັດຟອນ</h4>
+        <canvas id="presetPreview" class="preset-preview" width="600" height="240"></canvas>
+        <label>ຂໍ້ຄວາມຕົວຢ່າງ <input id="presetSample" lang="lo" value="ສະບາຍດີ ລາວ ໑໒໓"></label>
+        <label>ຊື່ພຣີເຊັດ <input id="presetName" lang="lo" maxlength="40" placeholder="ເຊັ່ນ: ຫົວຂໍ້ຊ່ອງຂ້ອຍ"></label>
+        <div id="presetForm" class="form"></div>
+        <div class="row">
+          <button id="presetSaveBtn" class="primary">💾 ບັນທຶກພຣີເຊັດ</button>
+          <button id="presetFromSelBtn" title="ດຶງຮູບແບບຈາກຂໍ້ຄວາມ ຫຼື ຊັບທີ່ເລືອກຢູ່">⇩ ເອົາຈາກທີ່ເລືອກ</button>
+        </div>
+        <div class="row">
+          <button id="presetAddTextBtn">+ ເພີ່ມເປັນຂໍ້ຄວາມ</button>
+          <button id="presetToSubsBtn">CC ໃຊ້ກັບຊັບທັງໝົດ</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>🅰 ຟອນຂອງຂ້ອຍ</h4>
+        <p class="hint">ເພີ່ມໄຟລ໌ຟອນ .ttf / .otf / .woff ທີ່ມີ (ເຊັ່ນ ຟອນລາວອື່ນໆ). ຟອນຈະຖືກເກັບໄວ້ໃນເບົາເຊີນີ້ ແລະ ເລືອກໃຊ້ໄດ້ທຸກບ່ອນ.</p>
+        <div id="fontList" class="font-list"></div>
+        <button id="fontAddBtn" class="wide">+ ເພີ່ມຟອນ</button>
+        <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+      </div>
+      <p class="hint">ລາກຂໍ້ຄວາມໃນຈໍເພື່ອຍ້າຍຕຳແໜ່ງ. ຕັດແຖວຕາມຄຳລາວອັດຕະໂນມັດ.</p>
     </section>
 
     <section class="tab-panel" id="tab-auto" hidden>
@@ -131,6 +158,7 @@
           <select id="ttsEngine">
             <option value="azure" selected>Microsoft Azure — ສຽງລາວແທ້ (ແນະນຳ)</option>
             <option value="openai">OpenAI — ສຳນຽງຕ່າງປະເທດ</option>
+            <option value="clone">🧬 ສຽງໂຄລນຂອງຂ້ອຍ (ElevenLabs)</option>
           </select>
         </label>
         <label>ສຽງ <select id="ttsVoice"></select></label>
@@ -161,6 +189,61 @@
         <button id="ttsSubsBtn" class="primary wide">🎙 ພາກສຽງຕາມຊັບທັງໝົດ</button>
       </div>
       <p class="hint">ເມື່ອໃຊ້ໃນໂຄສະນາ ຫຼື ຂ່າວ ຄວນບອກຜູ້ຊົມວ່າເປັນສຽງ AI.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-clone" hidden>
+      <div class="card">
+        <h4>🧬 ພຣີເຊັດສຽງຂອງຂ້ອຍ</h4>
+        <div id="cloneStatus" class="status">...</div>
+        <div id="voiceList" class="voice-list"></div>
+      </div>
+
+      <div class="card">
+        <h4>📜 ພາກສຽງຈາກສະຄຣິບ</h4>
+        <label>ສຽງ <select id="scriptVoice"></select></label>
+        <label>ຄວາມໄວ <output id="scriptRateOut">0%</output>
+          <input type="range" id="scriptRate" min="-30" max="20" step="5" value="0">
+        </label>
+        <label>ສະຄຣິບ / ບົດທີ່ຈະພາກ <span id="scriptCount" class="count"></span>
+          <textarea id="scriptText" rows="9" lang="lo" placeholder="ວາງບົດທີ່ຈະພາກໃສ່ບ່ອນນີ້. ຂຶ້ນແຖວໃໝ່ = ຢຸດພັກຍາວຂຶ້ນ.&#10;&#10;ສະບາຍດີທຸກຄົນ ຍິນດີຕ້ອນຮັບກັບມາສູ່ຊ່ອງຂອງພວກເຮົາ..."></textarea>
+        </label>
+        <div class="row tools">
+          <label class="inline">ພັກລະຫວ່າງປະໂຫຍກ <input id="scriptGap" type="number" min="0" max="3" step="0.1" value="0.25"> ວິ</label>
+        </div>
+        <label class="check"><input type="checkbox" id="scriptSubs" checked> ສ້າງຊັບໄຕເຕິ້ນຕາມບົດໃຫ້ອັດຕະໂນມັດ</label>
+        <label class="check"><input type="checkbox" id="scriptReplace" checked> ແທນທີ່ສຽງພາກຈາກສະຄຣິບເທື່ອກ່ອນ</label>
+        <div class="row">
+          <button id="scriptPreviewBtn">▶ ຟັງປະໂຫຍກທຳອິດ</button>
+          <button id="scriptGenBtn" class="primary">🎙 ພາກສຽງທັງໝົດ</button>
+        </div>
+        <div id="scriptResult" class="script-result" hidden></div>
+      </div>
+
+      <div class="card">
+        <h4>+ ສ້າງພຣີເຊັດສຽງໃໝ່</h4>
+        <p class="hint">ສົ່ງສຽງຕົວຢ່າງ 1–3 ນາທີ: ສຽງຄົນດຽວ, ຊັດເຈນ, ບໍ່ມີເພງ ຫຼື ສຽງລົບກວນ. ຍິ່ງສຽງຕົວຢ່າງດີ ສຽງໂຄລນກໍ່ຍິ່ງຄືກັນ.</p>
+        <label>ຊື່ສຽງ <input id="cloneName" lang="lo" maxlength="60" placeholder="ເຊັ່ນ: ສຽງຂ້ອຍ — ບັນຍາຍ"></label>
+        <div class="row">
+          <button id="cloneFileBtn">📁 ເລືອກໄຟລ໌ສຽງ / ວິດີໂອ</button>
+          <button id="cloneRecBtn">🎙 ອັດສຽງ</button>
+        </div>
+        <input type="file" id="cloneFiles" accept="audio/*,video/*" multiple hidden>
+        <div class="row">
+          <select id="cloneFromLib"><option value="">+ ໃຊ້ສຽງຈາກໄຟລ໌ໃນຄັງສື່...</option></select>
+        </div>
+        <div id="cloneSamples" class="clone-samples"></div>
+        <label>ໂມເດລ <select id="cloneModel"></select></label>
+        <label class="check"><input type="checkbox" id="cloneNoise"> ລຶບສຽງລົບກວນພື້ນຫຼັງ (ຖ້າອັດໃນບ່ອນມີສຽງ)</label>
+        <details class="advanced">
+          <summary>ມີ Voice ID ຈາກ ElevenLabs ແລ້ວ? (ນຳເຂົ້າ)</summary>
+          <label>Voice ID <input id="cloneVoiceId" autocomplete="off" placeholder="ເຊັ່ນ 21m00Tcm4TlvDq8ikWAM"></label>
+          <p class="hint">ສຳລັບສຽງທີ່ສ້າງໄວ້ໃນເວັບ ElevenLabs ແລ້ວ (ລວມ Professional Voice Clone ທີ່ຄຸນນະພາບສູງກວ່າ). ບໍ່ຕ້ອງສົ່ງໄຟລ໌ສຽງ.</p>
+        </details>
+        <label class="check consent"><input type="checkbox" id="cloneConsent"> ຂ້ອຍຢືນຢັນວ່າເປັນສຽງຂອງຂ້ອຍເອງ ຫຼື ໄດ້ຮັບອະນຸຍາດຈາກເຈົ້າຂອງສຽງແລ້ວ</label>
+        <button id="cloneCreateBtn" class="primary wide">🧬 ສ້າງພຣີເຊັດສຽງ</button>
+      </div>
+      <p class="hint">ພຣີເຊັດສຽງ ແລະ ໄຟລ໌ຕົວຢ່າງຖືກເກັບໄວ້ທີ່ເຊີບເວີ, ໃຊ້ໄດ້ຕະຫຼອດ ແລະ ເພີ່ມໄດ້ບໍ່ຈຳກັດ. ສຽງໂຄລນໃຊ້ໃນແຖບ 🎙 ສຽງພາກ ໄດ້ນຳ (ລວມທັງພາກຕາມຊັບ).
+        ຫ້າມໂຄລນສຽງຄົນອື່ນໂດຍບໍ່ໄດ້ຮັບອະນຸຍາດ ແລະ ຄວນບອກຜູ້ຊົມວ່າເປັນສຽງ AI.</p>
     </section>
 
     <section class="tab-panel" id="tab-subs" hidden>
@@ -199,7 +282,10 @@
         <button id="playBtn" class="play" title="ຫຼິ້ນ / ຢຸດ (Space)">▶</button>
         <button id="nextFrame" class="icon" title="ໜ້າ 1 ເຟຣມ (→)">▷</button>
       </div>
-      <button id="fullscreenBtn" class="icon" title="ເຕັມຈໍ">⛶</button>
+      <div class="transport-buttons">
+        <button id="snapshotBtn" class="icon" title="ບັນທຶກພາບນີ້ເປັນ PNG">📷</button>
+        <button id="fullscreenBtn" class="icon" title="ເຕັມຈໍ">⛶</button>
+      </div>
     </div>
   </main>
 
@@ -210,11 +296,13 @@
   <footer class="bottom">
     <div class="tl-toolbar">
       <button id="splitBtn" title="ຕັດ (S / Ctrl+B)">✂ ຕັດ</button>
+      <button id="trimLeftBtn" title="ລຶບສ່ວນກ່ອນເສັ້ນເວລາ (Q)">⇤ ລຶບຊ້າຍ</button>
+      <button id="trimRightBtn" title="ລຶບສ່ວນຫຼັງເສັ້ນເວລາ (W)">⇥ ລຶບຂວາ</button>
       <button id="deleteBtn" title="ລຶບ (Delete)">🗑 ລຶບ</button>
       <button id="dupBtn" title="ສຳເນົາ (Ctrl+D)">⧉ ສຳເນົາ</button>
       <button id="addSubBtn" title="ເພີ່ມຊັບທີ່ເສັ້ນເວລາ (T)">+ ຊັບ</button>
       <div class="spacer"></div>
-      <span class="hint">Space ຫຼິ້ນ · S ຕັດ · T ເພີ່ມຊັບ · Ctrl+ລໍ້ເມົ້າ ຊູມ</span>
+      <span class="hint">Space ຫຼິ້ນ · S ຕັດ · Q/W ລຶບຊ້າຍ/ຂວາ · T ເພີ່ມຊັບ · Ctrl+ລໍ້ເມົ້າ ຊູມ</span>
       <label class="zoom">🔍 <input id="zoomRange" type="range" min="4" max="400" value="60"></label>
     </div>
     <div id="timeline" class="timeline"></div>
@@ -231,7 +319,7 @@
 
 <div id="settingsModal" class="modal" hidden>
   <div class="modal-card">
-    <h3>⚙ ຕັ້ງຄ່າ AI ສ້າງຊັບ</h3>
+    <h3>⚙ ຕັ້ງຄ່າ AI</h3>
     <p class="hint">ການສ້າງຊັບ ແລະ ແປຊັບດ້ວຍ AI ໃຊ້ OpenAI (Whisper ຮອງຮັບພາສາລາວ). ສ້າງ API Key ໄດ້ທີ່
       <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>
       (ຄ່າໃຊ້ຈ່າຍປະມານ $0.006 ຕໍ່ນາທີ). Key ຖືກເກັບໄວ້ທີ່ເຊີບເວີເທົ່ານັ້ນ.</p>
@@ -243,6 +331,11 @@
       ແລ້ວເອົາ Key ແລະ Region ມາໃສ່. ແຜນຟຣີໃຊ້ໄດ້ 500,000 ຕົວອັກສອນ/ເດືອນ.</p>
     <label>Azure Speech Key <input id="azureKeyInput" type="password" autocomplete="off"></label>
     <label>Region <input id="azureRegionInput" placeholder="southeastasia" autocomplete="off"></label>
+    <h4>🧬 ໂຄລນສຽງ (ElevenLabs)</h4>
+    <p class="hint">ສົ່ງສຽງຕົວຢ່າງ ແລ້ວໄດ້ສຽງ AI ທີ່ຄືກັບສຽງນັ້ນ ໄວ້ພາກສະຄຣິບໄດ້ຕະຫຼອດ. ສ້າງ API Key ທີ່
+      <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">elevenlabs.io</a>
+      (ການໂຄລນສຽງຕ້ອງໃຊ້ແຜນ Starter ຂຶ້ນໄປ). ເປີດສິດ Text to Speech ແລະ Voices (write) ໃຫ້ Key.</p>
+    <label>ElevenLabs API Key <input id="elevenKeyInput" type="password" autocomplete="off"></label>
     <p class="hint">ບໍ່ມີ Key? ໃຊ້ "ຈັດເວລາຊັບຈາກບົດ" ທີ່ເຮັດວຽກໃນເຄື່ອງໄດ້ເລີຍ.</p>
     <div class="modal-actions">
       <button data-close>ປິດ</button>
