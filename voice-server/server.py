@@ -86,7 +86,21 @@ def load_converter():
     text = types.ModuleType("openvoice.text")
     text.text_to_sequence = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("not used"))
     sys.modules["openvoice.text"] = text
+    import openvoice.api as ov_api
     from openvoice.api import OpenVoiceBaseClass, ToneColorConverter
+
+    # OpenVoice calls torch.stft(return_complex=False), which newer torch
+    # deprecates (and will reject). Same maths via a complex STFT.
+    def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False):
+        pad = int((n_fft - hop_size) / 2)
+        y = torch.nn.functional.pad(y.unsqueeze(1), (pad, pad), mode="reflect").squeeze(1)
+        window = torch.hann_window(win_size).to(dtype=y.dtype, device=y.device)
+        spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=window,
+                          center=center, pad_mode="reflect", normalized=False, onesided=True,
+                          return_complex=True)
+        return torch.sqrt(torch.view_as_real(spec).pow(2).sum(-1) + 1e-6)
+
+    ov_api.spectrogram_torch = spectrogram_torch
 
     class Converter(ToneColorConverter):
         # ToneColorConverter's own __init__ always loads the wavmark model;
