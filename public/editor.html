@@ -158,7 +158,7 @@
           <select id="ttsEngine">
             <option value="azure" selected>Microsoft Azure — ສຽງລາວແທ້ (ແນະນຳ)</option>
             <option value="openai">OpenAI — ສຳນຽງຕ່າງປະເທດ</option>
-            <option value="clone">🧬 ສຽງໂຄລນຂອງຂ້ອຍ (ElevenLabs)</option>
+            <option value="clone">🧬 ສຽງໂຄລນຂອງຂ້ອຍ</option>
           </select>
         </label>
         <label>ສຽງ <select id="ttsVoice"></select></label>
@@ -221,6 +221,13 @@
 
       <div class="card">
         <h4>+ ສ້າງພຣີເຊັດສຽງໃໝ່</h4>
+        <label>ລະບົບໂຄລນ
+          <select id="cloneProvider">
+            <option value="local" selected>💻 ຟຣີ — ໃນເຄື່ອງຂອງຂ້ອຍ (OpenVoice)</option>
+            <option value="elevenlabs">☁ ElevenLabs — ເສຍເງິນ, ສຽງຄືກວ່າ</option>
+          </select>
+        </label>
+        <p id="cloneProviderHint" class="hint"></p>
         <p class="hint">ສົ່ງສຽງຕົວຢ່າງ 1–3 ນາທີ: ສຽງຄົນດຽວ, ຊັດເຈນ, ບໍ່ມີເພງ ຫຼື ສຽງລົບກວນ. ຍິ່ງສຽງຕົວຢ່າງດີ ສຽງໂຄລນກໍ່ຍິ່ງຄືກັນ.</p>
         <label>ຊື່ສຽງ <input id="cloneName" lang="lo" maxlength="60" placeholder="ເຊັ່ນ: ສຽງຂ້ອຍ — ບັນຍາຍ"></label>
         <div class="row">
@@ -232,9 +239,10 @@
           <select id="cloneFromLib"><option value="">+ ໃຊ້ສຽງຈາກໄຟລ໌ໃນຄັງສື່...</option></select>
         </div>
         <div id="cloneSamples" class="clone-samples"></div>
-        <label>ໂມເດລ <select id="cloneModel"></select></label>
-        <label class="check"><input type="checkbox" id="cloneNoise"> ລຶບສຽງລົບກວນພື້ນຫຼັງ (ຖ້າອັດໃນບ່ອນມີສຽງ)</label>
-        <details class="advanced">
+        <label id="cloneBaseWrap">ສຽງພື້ນຖານ (ສຳນຽງ ແລະ ການອອກສຽງ) <select id="cloneBaseVoice"></select></label>
+        <label id="cloneModelWrap">ໂມເດລ <select id="cloneModel"></select></label>
+        <label class="check" id="cloneNoiseWrap"><input type="checkbox" id="cloneNoise"> ລຶບສຽງລົບກວນພື້ນຫຼັງ (ຖ້າອັດໃນບ່ອນມີສຽງ)</label>
+        <details class="advanced" id="cloneAdvanced">
           <summary>ມີ Voice ID ຈາກ ElevenLabs ແລ້ວ? (ນຳເຂົ້າ)</summary>
           <label>Voice ID <input id="cloneVoiceId" autocomplete="off" placeholder="ເຊັ່ນ 21m00Tcm4TlvDq8ikWAM"></label>
           <p class="hint">ສຳລັບສຽງທີ່ສ້າງໄວ້ໃນເວັບ ElevenLabs ແລ້ວ (ລວມ Professional Voice Clone ທີ່ຄຸນນະພາບສູງກວ່າ). ບໍ່ຕ້ອງສົ່ງໄຟລ໌ສຽງ.</p>
@@ -336,6 +344,10 @@
       <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">elevenlabs.io</a>
       (ການໂຄລນສຽງຕ້ອງໃຊ້ແຜນ Starter ຂຶ້ນໄປ). ເປີດສິດ Text to Speech ແລະ Voices (write) ໃຫ້ Key.</p>
     <label>ElevenLabs API Key <input id="elevenKeyInput" type="password" autocomplete="off"></label>
+    <h4>💻 ເຊີບເວີສຽງຟຣີ (ໃນເຄື່ອງ)</h4>
+    <p class="hint">ໂຄລນສຽງຟຣີດ້ວຍ OpenVoice ທີ່ເຮັດວຽກໃນຄອມຂອງທ່ານ: ເປີດ <code>voice-server/start.bat</code> (Windows) ຫຼື
+      <code>voice-server/start.sh</code>. ຕ້ອງເປີດ LaoCut ໃນເຄື່ອງດຽວກັນ (<code>npm start</code>). ຖ້າມີ Azure Key ຂ້າງເທິງ ຈະໃຊ້ Azure ເປັນສຽງພື້ນຖານ.</p>
+    <label>URL ເຊີບເວີສຽງ <input id="localUrlInput" placeholder="http://127.0.0.1:7861" autocomplete="off"></label>
     <p class="hint">ບໍ່ມີ Key? ໃຊ້ "ຈັດເວລາຊັບຈາກບົດ" ທີ່ເຮັດວຽກໃນເຄື່ອງໄດ້ເລີຍ.</p>
     <div class="modal-actions">
       <button data-close>ປິດ</button>

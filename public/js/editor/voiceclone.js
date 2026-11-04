@@ -15,11 +15,9 @@ import { escapeHtml } from './timeline.js';
 const CHUNK_CHARS = 240;        // graphemes per TTS request
 const PARALLEL = 3;
 const MAX_SAMPLE_SEC = 180;     // longer samples don't improve an instant clone
-const MAX_SAMPLE_BYTES = 20 * 1024 * 1024;
 const SCRIPT_KEY = 'laocut-script-draft';
 const TEST_LINE = 'ສະບາຍດີ, ນີ້ແມ່ນສຽງພາກຂອງຂ້ອຍ. ຍິນດີທີ່ໄດ້ຮູ້ຈັກທຸກຄົນ.';
-// sent to the server untouched; anything else (video, recordings) becomes WAV
-const PASS_THROUGH = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/flac', 'audio/ogg'];
+const PROVIDER_KEY = 'laocut-clone-provider';
 
 let actx = null;
 function audioCtx() {
@@ -80,9 +78,10 @@ function mergeTakes(takes) {
   return encodeWav(out, rate);
 }
 
-export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMedia, adoptMedia, onVoicesChanged }) {
+export function initVoiceClone({ $, toast, busy, openModal, getStatus, refreshStatus, createMedia, adoptMedia, onVoicesChanged }) {
   let voices = [];
   let models = {};
+  let baseVoices = {};
   let defaultModel = 'eleven_v3';
   let online = false;
   let samples = [];   // pending samples for a new preset: { name, blob, duration }
@@ -106,12 +105,23 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
     player.play().catch(() => {});
   }
 
-  function ready() {
-    if (!getStatus().eleven) { openModal('settingsModal'); return false; }
+  // provider: 'local' (free voice server on this computer) or 'elevenlabs'
+  function ready(provider) {
+    const s = getStatus();
+    if (provider === 'local') {
+      if (s.local) return true;
+      toast('ເຊີບເວີສຽງຟຣີຍັງບໍ່ເປີດ — ເປີດ voice-server/start.bat (Windows) ຫຼື start.sh ແລ້ວກົດ "ກວດໃໝ່"', 'warn');
+      return false;
+    }
+    if (!s.eleven) { openModal('settingsModal'); return false; }
     return true;
   }
 
   const modelLabel = id => (models[id] || id).split(' — ')[0];
+  const voiceLabel = v => v.provider === 'local'
+    ? `💻 ຟຣີ · ${(baseVoices[v.baseVoice] || v.baseVoice).split(' (')[0]}`
+    : `☁ ${modelLabel(v.model)}`;
+  const providerOf = id => (voices.find(v => v.id === id) || {}).provider;
 
   // ------------------------------------------------------------ status & list
   function renderStatus() {
@@ -121,11 +131,23 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
       el.innerHTML = '<span class="dot"></span> ບໍ່ໄດ້ເຊື່ອມຕໍ່ເຊີບເວີ — ການໂຄລນສຽງຕ້ອງເປີດຜ່ານເຊີບເວີ LaoCut';
       return;
     }
-    el.innerHTML = s.eleven
-      ? `<span class="dot ok"></span> ເຊື່ອມຕໍ່ ElevenLabs ແລ້ວ · ${voices.length} ສຽງ`
-      : '<span class="dot"></span> ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key — <a href="#" data-open-settings>ຕັ້ງຄ່າ</a>';
+    const local = !s.local
+      ? '<span class="dot"></span> ເຊີບເວີສຽງຟຣີ: ຍັງບໍ່ເປີດ — ເປີດ <code>voice-server/start.bat</code>'
+      : s.localError ? `<span class="dot"></span> ເຊີບເວີສຽງຟຣີ: ໂຫຼດໂມເດລບໍ່ໄດ້ — ${escapeHtml(s.localError)}`
+      : s.localReady ? '<span class="dot ok"></span> ເຊີບເວີສຽງຟຣີ: ພ້ອມ'
+      : '<span class="dot"></span> ເຊີບເວີສຽງຟຣີ: ກຳລັງໂຫຼດໂມເດລ (ຄັ້ງທຳອິດດາວໂຫຼດ ~130 MB)...';
+    const eleven = s.eleven
+      ? '<span class="dot ok"></span> ElevenLabs: ເຊື່ອມຕໍ່ແລ້ວ'
+      : '<span class="dot"></span> ElevenLabs (ເສຍເງິນ): ບໍ່ໄດ້ຕັ້ງ — <a href="#" data-open-settings>ຕັ້ງຄ່າ</a>';
+    el.innerHTML = `<div>${local}</div><div>${eleven}</div>` +
+      `<div class="hint">${voices.length} ສຽງ · <a href="#" data-recheck>↻ ກວດໃໝ່</a></div>`;
     const link = el.querySelector('[data-open-settings]');
     if (link) link.onclick = e => { e.preventDefault(); openModal('settingsModal'); };
+    el.querySelector('[data-recheck]').onclick = async e => {
+      e.preventDefault();
+      await refreshStatus();
+      renderList();
+    };
   }
 
   async function refresh() {
@@ -134,6 +156,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
       voices = data.voices;
       models = data.models;
       defaultModel = data.defaultModel;
+      baseVoices = data.baseVoices || {};
       online = true;
     } catch (e) {
       online = false;
@@ -146,7 +169,29 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
   function renderModels() {
     $('#cloneModel').innerHTML = Object.entries(models).map(([id, label]) =>
       `<option value="${id}"${id === defaultModel ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
+    $('#cloneBaseVoice').innerHTML = Object.entries(baseVoices).map(([id, label]) =>
+      `<option value="${id}">${escapeHtml(label)}</option>`).join('');
   }
+
+  // the create form shows only what applies to the chosen provider
+  const providerSel = $('#cloneProvider');
+  try { providerSel.value = localStorage.getItem(PROVIDER_KEY) || 'local'; } catch (e) { /* ignore */ }
+  function renderProvider() {
+    const local = providerSel.value === 'local';
+    $('#cloneBaseWrap').hidden = !local;
+    $('#cloneModelWrap').hidden = local;
+    $('#cloneNoiseWrap').hidden = local;
+    $('#cloneAdvanced').hidden = local;
+    $('#cloneProviderHint').innerHTML = local
+      ? 'ຟຣີ ບໍ່ຈຳກັດ: ສຽງລາວພື້ນຖານຂອງ Microsoft (ອອກສຽງລາວຖືກ) ຖືກປ່ຽນໃຫ້ເປັນສຽງຂອງທ່ານດ້ວຍ OpenVoice ໃນຄອມຂອງທ່ານເອງ. ' +
+        'ເລືອກສຽງພື້ນຖານ <b>ເພດດຽວກັນ</b> ກັບເຈົ້າຂອງສຽງ. ສຽງຈະຄືປະມານໜຶ່ງ (ໂທນສຽງ), ຈັງຫວະການເວົ້າມາຈາກສຽງພື້ນຖານ.'
+      : 'ສຽງຄືກວ່າ ລວມທັງຈັງຫວະ ແລະ ອາລົມ, ແຕ່ຕ້ອງໃຊ້ແຜນ Starter ($5/ເດືອນ) ຂຶ້ນໄປ. ຄວນຟັງການອອກສຽງລາວກ່ອນ.';
+  }
+  providerSel.addEventListener('change', () => {
+    try { localStorage.setItem(PROVIDER_KEY, providerSel.value); } catch (e) { /* ignore */ }
+    renderProvider();
+  });
+  renderProvider();
 
   function renderList() {
     const sel = $('#scriptVoice').value;
@@ -155,7 +200,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
         <div class="voice-row">
           <button class="voice-main" data-act="pick" title="ໃຊ້ສຽງນີ້ພາກສະຄຣິບ">
             <b>${escapeHtml(v.name)}</b>
-            <small>${escapeHtml(modelLabel(v.model))} · ${v.imported ? 'ນຳເຂົ້າຈາກ Voice ID' : `${v.samples.length} ໄຟລ໌ຕົວຢ່າງ`}</small>
+            <small>${escapeHtml(voiceLabel(v))} · ${v.imported ? 'ນຳເຂົ້າຈາກ Voice ID' : `${v.samples.length} ໄຟລ໌ຕົວຢ່າງ`}</small>
           </button>
           <button data-act="test" title="ຟັງສຽງໂຄລນ">▶</button>
           <button data-act="edit" title="ຕັ້ງຄ່າສຽງນີ້">⚙</button>
@@ -173,14 +218,20 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
     const s = v.settings;
     const slider = (k, label, hint) => `<label>${label} <output>${s[k].toFixed(2)}</output>
       <input type="range" data-k="${k}" min="0" max="1" step="0.05" value="${s[k]}"></label>${hint ? `<p class="hint">${hint}</p>` : ''}`;
-    return `
-      <label>ຊື່ <input data-f="name" lang="lo" maxlength="60" value="${escapeHtml(v.name)}"></label>
-      <label>ໝາຍເຫດ <input data-f="description" lang="lo" maxlength="300" value="${escapeHtml(v.description)}"></label>
+    const local = v.provider === 'local';
+    const tuning = local ? `
+      <label>ສຽງພື້ນຖານ <select data-f="baseVoice">${Object.entries(baseVoices).map(([id, l]) =>
+        `<option value="${id}"${id === v.baseVoice ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>
+      <p class="hint">ສຽງພື້ນຖານກຳນົດສຳນຽງ ແລະ ຈັງຫວະ; ເລືອກເພດດຽວກັບເຈົ້າຂອງສຽງ ຈະຄືກວ່າ.</p>` : `
       <label>ໂມເດລ <select data-f="model">${Object.entries(models).map(([id, l]) =>
         `<option value="${id}"${id === v.model ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>
       ${slider('stability', 'ຄວາມສະຖຽນ', 'ຕ່ຳ = ມີອາລົມ ແລະ ຫຼາກຫຼາຍ, ສູງ = ສະໝ່ຳສະເໝີ (v3 ໃຊ້ 3 ລະດັບ: 0 / 0.5 / 1)')}
       ${slider('similarity', 'ຄວາມຄືກັບສຽງຕົ້ນສະບັບ')}
-      ${slider('style', 'ເນັ້ນສະໄຕລ໌ (ບໍ່ໃຊ້ກັບ v3)')}
+      ${slider('style', 'ເນັ້ນສະໄຕລ໌ (ບໍ່ໃຊ້ກັບ v3)')}`;
+    return `
+      <label>ຊື່ <input data-f="name" lang="lo" maxlength="60" value="${escapeHtml(v.name)}"></label>
+      <label>ໝາຍເຫດ <input data-f="description" lang="lo" maxlength="300" value="${escapeHtml(v.description)}"></label>
+      ${tuning}
       ${v.samples.length ? `<div class="voice-samples">ຕົວຢ່າງເດີມ: ${v.samples.map((x, i) =>
         `<button data-act="sample" data-n="${i}" title="${escapeHtml(x.label)}">▶ ${i + 1}</button>`).join('')}</div>` : ''}
       <div class="row">
@@ -191,7 +242,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
   }
 
   async function testVoice(v, btn) {
-    if (!ready()) return;
+    if (!ready(v.provider)) return;
     btn.disabled = true;
     try {
       play(await speak({ engine: 'clone', voice: v.id, text: TEST_LINE }));
@@ -222,7 +273,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
     } else if (act === 'save') {
       const settings = {};
       box.querySelectorAll('[data-k]').forEach(i => { settings[i.dataset.k] = Number(i.value); });
-      const body = { settings };
+      const body = v.provider === 'local' ? {} : { settings };
       box.querySelectorAll('[data-f]').forEach(i => { body[i.dataset.f] = i.value; });
       try {
         const { voice } = await api(`/voices/${v.id}`, {
@@ -233,7 +284,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
         toast('ບັນທຶກການຕັ້ງຄ່າສຽງແລ້ວ ✓', 'ok');
       } catch (err) { toast(err.message, 'error'); }
     } else if (act === 'reclone') {
-      if (!ready() || !confirm(`ໂຄລນສຽງ "${v.name}" ໃໝ່ຈາກໄຟລ໌ຕົວຢ່າງທີ່ເກັບໄວ້?`)) return;
+      if (!ready(v.provider) || !confirm(`ໂຄລນສຽງ "${v.name}" ໃໝ່ຈາກໄຟລ໌ຕົວຢ່າງທີ່ເກັບໄວ້?`)) return;
       try {
         busy('ກຳລັງໂຄລນສຽງໃໝ່...', 0.5);
         await api(`/voices/${v.id}/reclone`, { method: 'POST' });
@@ -260,13 +311,11 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
   // ------------------------------------------------------------ new preset: samples
   async function addSample(blob, name) {
     try {
+      // everything becomes mono WAV: both providers read it, and video
+      // files or browser recordings are reduced to their voice track
       const buf = await decode(blob);
-      let out = blob;
-      const type = (blob.type || '').split(';')[0];
-      if (!PASS_THROUGH.includes(type) || blob.size > MAX_SAMPLE_BYTES || buf.duration > MAX_SAMPLE_SEC + 5) {
-        out = encodeWav(toMono(buf, MAX_SAMPLE_SEC), buf.sampleRate);
-        name = name.replace(/\.[^.]+$/, '') + '.wav';
-      }
+      const out = encodeWav(toMono(buf, MAX_SAMPLE_SEC), buf.sampleRate);
+      name = name.replace(/\.[^.]+$/, '') + '.wav';
       samples.push({ name, blob: out, duration: Math.min(buf.duration, MAX_SAMPLE_SEC) });
       renderSamples();
     } catch (e) {
@@ -353,21 +402,26 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
 
   $('#cloneCreateBtn').addEventListener('click', async () => {
     if (!online) return toast('ຕ້ອງເປີດຜ່ານເຊີບເວີ LaoCut', 'error');
-    if (!ready()) return;
+    const provider = providerSel.value;
+    if (!ready(provider)) return;
     const name = $('#cloneName').value.trim();
-    const voiceId = $('#cloneVoiceId').value.trim();
+    const voiceId = provider === 'local' ? '' : $('#cloneVoiceId').value.trim();
     if (!name) { $('#cloneName').focus(); return toast('ໃສ່ຊື່ສຽງກ່ອນ', 'warn'); }
     if (!voiceId && !samples.length) return toast('ເພີ່ມສຽງຕົວຢ່າງກ່ອນ (ເລືອກໄຟລ໌ ຫຼື ອັດສຽງ)', 'warn');
     if (!$('#cloneConsent').checked) return toast('ກະລຸນາຢືນຢັນສິດໃນສຽງນີ້ກ່ອນ', 'warn');
     const fd = new FormData();
     fd.append('name', name);
+    fd.append('provider', provider);
+    fd.append('baseVoice', $('#cloneBaseVoice').value);
     fd.append('consent', '1');
     fd.append('model', $('#cloneModel').value);
     fd.append('removeNoise', $('#cloneNoise').checked ? '1' : '0');
     if (voiceId) fd.append('voiceId', voiceId);
     else for (const s of samples) fd.append('files', s.blob, s.name);
     try {
-      busy(voiceId ? 'ກຳລັງນຳເຂົ້າສຽງ...' : 'ກຳລັງໂຄລນສຽງ... (ປະມານ 10–30 ວິນາທີ)', 0.5);
+      busy(voiceId ? 'ກຳລັງນຳເຂົ້າສຽງ...'
+        : provider === 'local' ? 'ກຳລັງໂຄລນສຽງໃນເຄື່ອງ... (ຄັ້ງທຳອິດອາດໃຊ້ເວລາຫຼາຍນາທີ ເພາະຕ້ອງດາວໂຫຼດໂມເດລ)'
+          : 'ກຳລັງໂຄລນສຽງ... (ປະມານ 10–30 ວິນາທີ)', 0.5);
       const { voice } = await api('/voices', { method: 'POST', body: fd });
       busy(false);
       voices.push(voice);
@@ -406,7 +460,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
   function scriptOpts() {
     const voice = $('#scriptVoice').value;
     if (!voice) { toast('ສ້າງ ຫຼື ເລືອກພຣີເຊັດສຽງກ່ອນ', 'warn'); return null; }
-    if (!ready()) return null;
+    if (!ready(providerOf(voice))) return null;
     const gap = Math.min(3, Math.max(0, Number($('#scriptGap').value) || 0));
     const pieces = splitScript(scriptEl.value, gap);
     if (!pieces.length) { toast('ວາງສະຄຣິບກ່ອນ', 'warn'); scriptEl.focus(); return null; }
@@ -433,7 +487,8 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
     const o = scriptOpts();
     if (!o) return;
     const chars = o.pieces.reduce((s, p) => s + graphemeLength(p.text), 0);
-    if (chars > 5000 && !confirm(`ສະຄຣິບຍາວ ${chars.toLocaleString()} ຕົວອັກສອນ (ໃຊ້ເຄຣດິດ ElevenLabs ຕາມຈຳນວນຕົວອັກສອນ). ສືບຕໍ່ບໍ?`)) return;
+    if (chars > 5000 && providerOf(o.voice) !== 'local' &&
+      !confirm(`ສະຄຣິບຍາວ ${chars.toLocaleString()} ຕົວອັກສອນ (ໃຊ້ເຄຣດິດ ElevenLabs ຕາມຈຳນວນຕົວອັກສອນ). ສືບຕໍ່ບໍ?`)) return;
     const result = new Array(o.pieces.length);
     let done = 0;
     try {
@@ -522,7 +577,7 @@ export function initVoiceClone({ $, toast, busy, openModal, getStatus, createMed
     if (act === 'insert') insertTakes().catch(err => toast(err.message, 'error'));
     if (act === 'play') play(takes[i].blob);
     if (act === 'redo') {
-      if (!ready()) return;
+      if (!ready(providerOf(takes[i].voice))) return;
       b.disabled = true;
       try {
         const t = takes[i];

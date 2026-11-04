@@ -1,0 +1,10 @@
+# LaoCut free voice server. OpenVoice itself is installed separately with
+# --no-deps by start.bat / start.sh (its own pins don't install on new Python).
+torch
+librosa
+soundfile
+numpy
+fastapi
+uvicorn
+python-multipart
+edge-tts

@@ -32,7 +32,7 @@ async function failure(r, service) {
   return new Error(`${service}: ${msg || `HTTP ${r.status}`}`);
 }
 
-async function azureSpeak({ key, region, voice, text, rate, pitch }) {
+async function azureSpeak({ key, region, voice, text, rate, pitch, format = 'audio-24khz-96kbitrate-mono-mp3' }) {
   // region becomes part of the hostname, so only allow plain region ids
   if (!/^[a-z0-9]+$/.test(region)) throw new Error('Azure region ບໍ່ຖືກຕ້ອງ (ເຊັ່ນ southeastasia)');
   const r = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
@@ -40,7 +40,7 @@ async function azureSpeak({ key, region, voice, text, rate, pitch }) {
     headers: {
       'Ocp-Apim-Subscription-Key': key,
       'Content-Type': 'application/ssml+xml',
-      'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
+      'X-Microsoft-OutputFormat': format,
       'User-Agent': 'LaoCut'
     },
     body: buildSsml(text, voice, rate, pitch),

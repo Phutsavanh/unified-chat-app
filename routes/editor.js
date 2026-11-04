@@ -48,16 +48,27 @@ function elevenKey() {
   return process.env.ELEVENLABS_API_KEY || load().editor.elevenlabs_api_key || '';
 }
 
+function localUrl() {
+  const u = process.env.LOCAL_VOICE_URL || load().editor.local_voice_url || 'http://127.0.0.1:7861';
+  return u.replace(/\/+$/, '');
+}
+
 function mask(v) {
   if (!v) return '';
   if (v.length <= 8) return '••••••••';
   return v.slice(0, 4) + '••••••••' + v.slice(-4);
 }
 
-router.get('/status', (req, res) => {
+router.get('/status', async (req, res) => {
   const ed = load().editor;
   const az = azureCreds();
+  const health = await clone.localHealth(localUrl());
   res.json({
+    local: Boolean(health),
+    localReady: Boolean(health && health.ready),
+    localLoading: Boolean(health && health.loading),
+    localError: (health && health.error) || '',
+    localUrl: localUrl(),
     whisper: Boolean(apiKey()),
     fromEnv: Boolean(process.env.OPENAI_API_KEY),
     key: mask(ed.openai_api_key),
@@ -71,12 +82,16 @@ router.get('/status', (req, res) => {
   });
 });
 
-const SETTING_KEYS = ['openai_api_key', 'azure_speech_key', 'azure_speech_region', 'elevenlabs_api_key'];
+const SETTING_KEYS = ['openai_api_key', 'azure_speech_key', 'azure_speech_region', 'elevenlabs_api_key', 'local_voice_url'];
 
 router.post('/settings', (req, res) => {
   const region = req.body && req.body.azure_speech_region;
   if (typeof region === 'string' && !/^[a-z0-9]*$/.test(region.trim().toLowerCase())) {
     return res.status(400).json({ error: 'Azure region ບໍ່ຖືກຕ້ອງ (ເຊັ່ນ southeastasia)' });
+  }
+  const url = req.body && req.body.local_voice_url;
+  if (typeof url === 'string' && url.trim() && !/^https?:\/\/[^\s/]+$/.test(url.trim().replace(/\/+$/, ''))) {
+    return res.status(400).json({ error: 'URL ເຊີບເວີສຽງບໍ່ຖືກຕ້ອງ (ເຊັ່ນ http://127.0.0.1:7861)' });
   }
   const db = load();
   for (const k of SETTING_KEYS) {
@@ -214,6 +229,14 @@ router.post('/tts', async (req, res) => {
       const preset = load().editor.voices.find(v => v.id === voice);
       if (!preset) return res.status(400).json({ error: 'ບໍ່ພົບພຣີເຊັດສຽງນີ້ (ອາດຖືກລຶບແລ້ວ)' });
       if (!preset.voiceId) return res.status(400).json({ error: 'ສຽງນີ້ຍັງບໍ່ໄດ້ໂຄລນ — ກົດ "ໂຄລນໃໝ່" ໃນແຖບສຽງໂຄລນ' });
+      if (preset.provider === 'local') {
+        const az = azureCreds();
+        const out = await clone.localSpeak({
+          url: localUrl(), preset, text: clean, rate: r,
+          azure: az.key && az.region ? az : null, azureSpeak: tts.azureSpeak
+        });
+        return res.type(out.type).send(out.audio);
+      }
       const key = elevenKey();
       if (!key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key' });
       audio = await clone.speak({ key, preset, text: clean, rate: r });
@@ -239,6 +262,8 @@ function publicVoice(v) {
   return {
     id: v.id,
     name: v.name,
+    provider: v.provider || 'elevenlabs',
+    baseVoice: v.baseVoice || 'lo-LA-KeomanyNeural',
     description: v.description || '',
     model: v.model || clone.DEFAULT_MODEL(),
     settings: { ...clone.DEFAULT_SETTINGS, ...(v.settings || {}) },
@@ -260,15 +285,19 @@ function cleanName(v, max = 60) {
 }
 
 router.get('/voices', (req, res) => {
-  res.json({ voices: load().editor.voices.map(publicVoice), models: clone.MODELS, defaultModel: clone.DEFAULT_MODEL() });
+  res.json({
+    voices: load().editor.voices.map(publicVoice),
+    models: clone.MODELS,
+    defaultModel: clone.DEFAULT_MODEL(),
+    baseVoices: clone.LOCAL_BASE_VOICES
+  });
 });
 
-// multipart/form-data: name, description, consent, removeNoise, model, voiceId?, files[]
+// multipart/form-data: provider, name, description, consent, removeNoise,
+// model, baseVoice, voiceId?, files[]
 router.post('/voices',
   express.raw({ type: 'multipart/form-data', limit: clone.MAX_SAMPLES * clone.MAX_SAMPLE_BYTES }),
   async (req, res) => {
-    const key = elevenKey();
-    if (!key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key (ກົດ ⚙)' });
     let form;
     try {
       form = await new Response(req.body, { headers: { 'content-type': req.headers['content-type'] } }).formData();
@@ -279,6 +308,11 @@ router.post('/voices',
     const description = cleanName(form.get('description'), 300);
     const importId = cleanName(form.get('voiceId'), 64);
     const model = clone.MODELS[form.get('model')] ? form.get('model') : clone.DEFAULT_MODEL();
+    const provider = form.get('provider') === 'local' ? 'local' : 'elevenlabs';
+    const baseVoice = clone.LOCAL_BASE_VOICES[form.get('baseVoice')] ? form.get('baseVoice') : 'lo-LA-KeomanyNeural';
+    const key = elevenKey();
+    if (provider === 'elevenlabs' && !key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key (ກົດ ⚙)' });
+    if (provider === 'local' && importId) return res.status(400).json({ error: 'ການນຳເຂົ້າ Voice ID ໃຊ້ໄດ້ກັບ ElevenLabs ເທົ່ານັ້ນ' });
     if (!name) return res.status(400).json({ error: 'ໃສ່ຊື່ສຽງກ່ອນ' });
     if (form.get('consent') !== '1') {
       return res.status(400).json({ error: 'ຕ້ອງຢືນຢັນວ່າເປັນສຽງຂອງທ່ານເອງ ຫຼື ໄດ້ຮັບອະນຸຍາດຈາກເຈົ້າຂອງສຽງ' });
@@ -286,7 +320,8 @@ router.post('/voices',
 
     const db = load();
     const preset = {
-      id: newPresetId(), name, description, model,
+      id: newPresetId(), name, description, provider, model,
+      ...(provider === 'local' ? { baseVoice } : {}),
       settings: { ...clone.DEFAULT_SETTINGS },
       samples: [], consent: true, createdAt: new Date().toISOString()
     };
@@ -310,10 +345,12 @@ router.post('/voices',
         if (!files.length) return res.status(400).json({ error: 'ຕ້ອງມີໄຟລ໌ສຽງຕົວຢ່າງຢ່າງໜ້ອຍ 1 ໄຟລ໌' });
         if (files.length > clone.MAX_SAMPLES) return res.status(400).json({ error: `ສົ່ງໄດ້ສູງສຸດ ${clone.MAX_SAMPLES} ໄຟລ໌` });
         preset.samples = clone.saveSamples(preset.id, files);
-        preset.voiceId = await clone.cloneVoice({
-          key, name: `LaoCut · ${name}`, description, removeNoise: form.get('removeNoise') === '1',
-          samples: files
-        });
+        preset.voiceId = provider === 'local'
+          ? await clone.localClone({ url: localUrl(), samples: files })
+          : await clone.cloneVoice({
+            key, name: `LaoCut · ${name}`, description, removeNoise: form.get('removeNoise') === '1',
+            samples: files
+          });
       }
     } catch (e) {
       clone.removeSamples(preset.id);
@@ -335,6 +372,10 @@ router.patch('/voices/:id', (req, res) => {
     v.name = name;
   }
   if (b.description !== undefined) v.description = cleanName(b.description, 300);
+  if (b.baseVoice !== undefined) {
+    if (!clone.LOCAL_BASE_VOICES[b.baseVoice]) return res.status(400).json({ error: 'ບໍ່ພົບສຽງພື້ນຖານນີ້' });
+    v.baseVoice = b.baseVoice;
+  }
   if (b.model !== undefined) {
     if (!clone.MODELS[b.model]) return res.status(400).json({ error: 'ບໍ່ຮອງຮັບໂມເດລນີ້' });
     v.model = b.model;
@@ -355,15 +396,21 @@ router.patch('/voices/:id', (req, res) => {
 router.post('/voices/:id/reclone', async (req, res) => {
   const v = findVoice(req, res);
   if (!v) return;
+  const local = v.provider === 'local';
   const key = elevenKey();
-  if (!key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key' });
+  if (!local && !key) return res.status(400).json({ error: 'ຍັງບໍ່ໄດ້ຕັ້ງ ElevenLabs API Key' });
   if (!v.samples || !v.samples.length) return res.status(400).json({ error: 'ສຽງນີ້ນຳເຂົ້າຈາກ Voice ID, ບໍ່ມີໄຟລ໌ຕົວຢ່າງໃຫ້ໂຄລນໃໝ່' });
   try {
     const samples = clone.readSamples(v);
     const old = v.voiceId;
-    v.voiceId = await clone.cloneVoice({ key, name: `LaoCut · ${v.name}`, description: v.description, removeNoise: false, samples });
+    v.voiceId = local
+      ? await clone.localClone({ url: localUrl(), samples })
+      : await clone.cloneVoice({ key, name: `LaoCut · ${v.name}`, description: v.description, removeNoise: false, samples });
     save();
-    if (old && old !== v.voiceId) clone.deleteVoice({ key, voiceId: old }).catch(() => {});
+    if (old && old !== v.voiceId) {
+      if (local) clone.localDelete({ url: localUrl(), voiceId: old });
+      else clone.deleteVoice({ key, voiceId: old }).catch(() => {});
+    }
     res.json({ voice: publicVoice(v) });
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -388,7 +435,9 @@ router.delete('/voices/:id', async (req, res) => {
   // an imported voice belongs to the user's ElevenLabs library: leave it there
   const key = elevenKey();
   let remote = 'skipped';
-  if (key && v.voiceId && !v.imported) {
+  if (v.provider === 'local') {
+    if (v.voiceId) await clone.localDelete({ url: localUrl(), voiceId: v.voiceId });
+  } else if (key && v.voiceId && !v.imported) {
     remote = await clone.deleteVoice({ key, voiceId: v.voiceId }).then(() => 'deleted', () => 'failed');
   }
   res.json({ ok: true, remote });

@@ -1,7 +1,10 @@
-// Voice cloning for the editor's "my voices" presets, through ElevenLabs.
-// A preset = one cloned voice (ElevenLabs voice_id) + the original sample
+// Voice cloning for the editor's "my voices" presets. Two providers:
+//  - "local" (free): the LaoCut voice server in voice-server/ running on the
+//    same computer — free Microsoft Lao base voices + OpenVoice V2 converter.
+//  - "elevenlabs" (paid): ElevenLabs instant voice cloning.
+// A preset = one cloned voice (provider's voice id) + the original sample
 // files, which stay on this server so the voice can be cloned again later
-// (new API key, new account, or a voice deleted on the ElevenLabs side).
+// (new key/account, voice server reinstalled, or the voice deleted remotely).
 const fs = require('fs');
 const path = require('path');
 
@@ -147,7 +150,82 @@ async function speak({ key, preset, text, rate }) {
   return Buffer.from(await r.arrayBuffer());
 }
 
+// ---------------------------------------------------------------- local (free)
+const LOCAL_BASE_VOICES = {
+  'lo-LA-KeomanyNeural': 'ແກ້ວມະນີ — ຍິງ (ລາວ)',
+  'lo-LA-ChanthavongNeural': 'ຈັນທະວົງ — ຊາຍ (ລາວ)',
+  'th-TH-PremwadeeNeural': 'Premwadee — ຍິງ (ໄທ)',
+  'th-TH-NiwatNeural': 'Niwat — ຊາຍ (ໄທ)',
+  'en-US-JennyNeural': 'Jenny — ຍິງ (English)',
+  'en-US-GuyNeural': 'Guy — ຊາຍ (English)'
+};
+
+async function localFailure(r) {
+  const body = await r.text().catch(() => '');
+  let msg = body.slice(0, 300);
+  try { msg = JSON.parse(body).detail || msg; } catch (e) { /* not JSON */ }
+  return new Error(`ເຊີບເວີສຽງ: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+}
+
+function localError(e) {
+  if (e.name === 'TimeoutError') return new Error('ເຊີບເວີສຽງຕອບຊ້າເກີນໄປ (ຄັ້ງທຳອິດອາດກຳລັງດາວໂຫຼດໂມເດລ — ລອງໃໝ່ອີກເທື່ອ)');
+  if (e.message === 'fetch failed') return new Error('ເຊື່ອມຕໍ່ເຊີບເວີສຽງບໍ່ໄດ້ — ເປີດ voice-server/start.bat (ຫຼື start.sh) ກ່ອນ');
+  return e;
+}
+
+async function localHealth(url) {
+  try {
+    const r = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1500) });
+    return r.ok ? await r.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function localClone({ url, samples }) {
+  const form = new FormData();
+  for (const s of samples) form.append('files', new Blob([s.data], { type: s.type }), s.name);
+  try {
+    const r = await fetch(`${url}/voices`, { method: 'POST', body: form, signal: AbortSignal.timeout(10 * 60 * 1000) });
+    if (!r.ok) throw await localFailure(r);
+    return (await r.json()).id;
+  } catch (e) { throw localError(e); }
+}
+
+async function localDelete({ url, voiceId }) {
+  try {
+    await fetch(`${url}/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE', signal: AbortSignal.timeout(10 * 1000) });
+  } catch (e) { /* server off: the file stays, harmless */ }
+}
+
+// Base speech from Microsoft: Azure (when the user set a key — official,
+// 500k free characters a month) or the voice server's free edge-tts voices.
+async function localSpeak({ url, preset, text, rate, azure, azureSpeak }) {
+  const baseVoice = LOCAL_BASE_VOICES[preset.baseVoice] ? preset.baseVoice : 'lo-LA-KeomanyNeural';
+  try {
+    let r;
+    if (azure) {
+      const base = await azureSpeak({ ...azure, voice: baseVoice, text, rate, pitch: 0, format: 'riff-24khz-16bit-mono-pcm' });
+      const form = new FormData();
+      form.append('audio', new Blob([base], { type: 'audio/wav' }), 'base.wav');
+      form.append('voice_id', preset.voiceId);
+      form.append('base_voice', baseVoice);
+      r = await fetch(`${url}/convert`, { method: 'POST', body: form, signal: AbortSignal.timeout(5 * 60 * 1000) });
+    } else {
+      r = await fetch(`${url}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice_id: preset.voiceId, base_voice: baseVoice, rate: Math.round(rate || 0) }),
+        signal: AbortSignal.timeout(5 * 60 * 1000)
+      });
+    }
+    if (!r.ok) throw await localFailure(r);
+    return { audio: Buffer.from(await r.arrayBuffer()), type: r.headers.get('content-type') || 'audio/wav' };
+  } catch (e) { throw localError(e); }
+}
+
 module.exports = {
+  LOCAL_BASE_VOICES, localHealth, localClone, localDelete, localSpeak,
   MODELS, DEFAULT_MODEL, DEFAULT_SETTINGS, MAX_SAMPLE_BYTES, MAX_SAMPLES, SAMPLE_TYPES,
   saveSamples, readSamples, samplePath, removeSamples,
   cloneVoice, deleteVoice, getVoice, speak, voiceSettings
